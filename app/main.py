@@ -1,19 +1,29 @@
+import json
 import os
 import re
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
+
 from app.catalog import product_menu
-from app.menu import MENU, menu_response
+from app.menu import MENU
 from app.openai_service import generate_reply
-from app.order_details import get_customer_order, update_address, update_payment
+from app.order_details import (
+    confirm_upi_payment,
+    get_customer_order,
+    save_payment_link,
+    update_address,
+    update_payment,
+)
 from app.order_flow import process_order_message
+from app.payment_service import PaymentError, create_payment_link, extract_paid_event, verify_webhook_signature
 from app.seller_notification import notify_seller
 from app.state import get_state, reset_state
 from app.whatsapp import send_text_message
 
 load_dotenv()
-app = FastAPI(title="Talegaon Fresh AI Agent", version="0.5.0")
+app = FastAPI(title="Talegaon Fresh AI Agent", version="0.6.0")
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN")
 
 
@@ -59,17 +69,17 @@ def _payment_method(message: str) -> str | None:
 
 
 def _order_id(message: str) -> int | None:
-    match = re.search(r"\\b(?:order\\s*(?:id|#)?\\s*)?(\\d+)\\b", message, re.IGNORECASE)
+    match = re.search(r"\b(?:order\s*(?:id|#)?\s*)?(\d+)\b", message, re.IGNORECASE)
     return int(match.group(1)) if match else None
 
 
 def _order_status_message(order: dict) -> str:
     payment = order["payment_method"] or "Not selected"
     return (
-        f"📦 Order #{order['order_id']}\\n"
-        f"Status: {order['status']}\\n"
-        f"Total: ₹{order['total']:.2f}\\n"
-        f"Payment: {payment}\\n"
+        f"📦 Order #{order['order_id']}\n"
+        f"Status: {order['status']}\n"
+        f"Total: ₹{order['total']:.2f}\n"
+        f"Payment: {payment}\n"
         f"Address: {order['address'] or 'Not provided'}"
     )
 
@@ -83,7 +93,6 @@ def handle_conversation(customer_id: str, message: str) -> str:
         reset_state(customer_id)
         return MENU
 
-    # State-specific input must be handled before numeric menu options.
     if state.step == "order_status":
         order_id = _order_id(value)
         if order_id is None:
@@ -103,7 +112,7 @@ def handle_conversation(customer_id: str, message: str) -> str:
             reset_state(customer_id)
             return "❌ I could not update the pending order. Please start again by replying 1."
         state.step = "payment"
-        return f"📍 Address saved for Order #{order_id}.\\n\\nChoose payment method:\\n1️⃣ UPI\\n2️⃣ Cash on Delivery"
+        return f"📍 Address saved for Order #{order_id}.\n\nChoose payment method:\n1️⃣ UPI\n2️⃣ Cash on Delivery"
 
     if state.step == "payment":
         method = _payment_method(value)
@@ -121,22 +130,34 @@ def handle_conversation(customer_id: str, message: str) -> str:
             notify_seller(order_id, customer_id, order["total"], order["address"] or "", method)
             state.step = "menu"
             state.pending_order_id = None
-            return f"✅ Order #{order_id} confirmed!\\nTotal: ₹{order['total']:.2f}\\nPayment: Cash on Delivery\\n\\nWe will prepare your order and deliver it to you."
+            return f"✅ Order #{order_id} confirmed!\nTotal: ₹{order['total']:.2f}\nPayment: Cash on Delivery\n\nWe will prepare your order and deliver it to you."
+
+        try:
+            link = create_payment_link(order_id, order["total"], customer_id)
+            save_payment_link(order_id, link["id"], link["short_url"])
+        except PaymentError:
+            return "❌ UPI payment is temporarily unavailable. Please choose 2 for Cash on Delivery or try again later."
+
         state.step = "payment_pending"
-        return f"💳 Order #{order_id} is awaiting UPI payment.\\nTotal: ₹{order['total']:.2f}\\n\\nUPI payment link/verification will be connected in the next payment integration step. Please do not mark the order as paid manually."
+        return (
+            f"💳 Order #{order_id} is ready for UPI payment.\n"
+            f"Total: ₹{order['total']:.2f}\n\n"
+            f"Pay securely using this link:\n{link['short_url']}\n\n"
+            "After payment, your order will be confirmed automatically."
+        )
 
     if state.step == "payment_pending":
-        return "💳 Your order is awaiting UPI payment verification. We will confirm it after the payment integration is connected."
+        return "💳 Your UPI payment link is still pending. Please complete the payment using the link sent above. Your order will be confirmed automatically after Razorpay verifies the payment."
 
     if value == "1":
         reset_state(customer_id)
         state = get_state(customer_id)
         state.step = "products"
-        return "🛒 Let's place your order!\\n\\nSend your items and quantities. Example:\\n2 kg tomato, 1 kg potato, 500 g carrot"
+        return "🛒 Let's place your order!\n\nSend your items and quantities. Example:\n2 kg tomato, 1 kg potato, 500 g carrot"
 
     if value == "2":
         state.step = "products"
-        return f"🥦 Today's Products\\n\\n{product_menu()}\\n\\nSend product name and quantity to order."
+        return f"🥦 Today's Products\n\n{product_menu()}\n\nSend product name and quantity to order."
 
     if value == "3":
         state.status_order_lookup = True
@@ -144,10 +165,10 @@ def handle_conversation(customer_id: str, message: str) -> str:
         return "🔎 Please send your Talegaon Fresh Order ID to check its status."
 
     if value == "4":
-        return "🚚 Delivery Information\\n\\nWe provide home delivery in Talegaon and nearby areas. Delivery details are confirmed during your order.\\n\\nReply 1 to place an order."
+        return "🚚 Delivery Information\n\nWe provide home delivery in Talegaon and nearby areas. Delivery details are confirmed during your order.\n\nReply 1 to place an order."
 
     if value == "5":
-        return "💳 Payment Options\\n\\n1️⃣ UPI\\n2️⃣ Cash on Delivery\\n\\nYour payment method will be confirmed before the order is completed."
+        return "💳 Payment Options\n\n1️⃣ UPI\n2️⃣ Cash on Delivery\n\nYour payment method will be confirmed before the order is completed."
 
     if value == "6":
         state.step = "support"
@@ -169,3 +190,68 @@ def handle_conversation(customer_id: str, message: str) -> str:
         state.step = "address"
     return result["message"]
 
+
+@app.post("/webhook")
+async def receive_webhook(request: Request):
+    body = await request.json()
+    customer_id, message = extract_message(body)
+    if not customer_id or not message:
+        return {"status": "ignored"}
+
+    reply = handle_conversation(customer_id, message)
+    send_text_message(customer_id, reply)
+    return {"status": "received"}
+
+
+@app.post("/razorpay/webhook")
+async def razorpay_webhook(request: Request):
+    raw_body = await request.body()
+    signature = request.headers.get("X-Razorpay-Signature")
+    if not verify_webhook_signature(raw_body, signature):
+        return PlainTextResponse("Invalid signature", status_code=400)
+
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError:
+        return PlainTextResponse("Invalid JSON", status_code=400)
+
+    event = extract_paid_event(payload)
+    if not event:
+        return {"status": "ignored"}
+
+    try:
+        order_id = int(str(event["reference_id"]).removeprefix("TF-"))
+    except ValueError:
+        return {"status": "ignored"}
+
+    if event["event"] == "payment_link.paid" and event["status"] == "captured":
+        confirmed = confirm_upi_payment(
+            order_id=order_id,
+            payment_link_id=event["payment_link_id"],
+            payment_id=event["payment_id"],
+            event_id=event["event_id"],
+            amount_paise=event["amount"],
+        )
+        if confirmed:
+            order = get_customer_order(order_id, _customer_for_order(order_id))
+            if order:
+                customer_id = order["customer_id"]
+                notify_seller(order_id, customer_id, order["total"], order["address"] or "", "UPI")
+                send_text_message(
+                    customer_id,
+                    f"✅ Payment received for Order #{order_id}. Your UPI payment is verified and the order is confirmed.\nTotal: ₹{order['total']:.2f}",
+                )
+
+    return {"status": "processed"}
+
+
+def _customer_for_order(order_id: int) -> str:
+    from app.db import SessionLocal
+    from app.models import OrderModel
+
+    db = SessionLocal()
+    try:
+        order = db.get(OrderModel, order_id)
+        return order.customer_id if order else ""
+    finally:
+        db.close()
