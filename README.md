@@ -83,3 +83,42 @@ Example status update:
 ```
 
 Order status changes use the centralized lifecycle rules, so invalid jumps such as `PENDING -> DELIVERED` are rejected.
+
+
+## Step 9 — production WhatsApp and Razorpay E2E checklist
+
+Before switching to live payment processing, validate the production integration in Razorpay test mode.
+
+### Required production environment
+
+Set `ENVIRONMENT=production` and configure:
+
+- `OPENAI_API_KEY`
+- `DATABASE_URL` using production MySQL
+- `WHATSAPP_VERIFY_TOKEN`
+- `WHATSAPP_ACCESS_TOKEN`
+- `WHATSAPP_PHONE_NUMBER_ID`
+- `SELLER_WHATSAPP_NUMBER`
+- `RAZORPAY_KEY_ID`
+- `RAZORPAY_KEY_SECRET`
+- `RAZORPAY_WEBHOOK_SECRET`
+- `ADMIN_API_TOKEN`
+
+Never commit these values to Git.
+
+### E2E sequence
+
+1. Verify `GET /health`.
+2. Verify the Meta WhatsApp webhook challenge against `WHATSAPP_VERIFY_TOKEN`.
+3. Send a test WhatsApp message and confirm the backend receives the webhook.
+4. Place a test order and confirm the order is persisted with the current database prices.
+5. Provide an address and select COD; verify `CONFIRMED` status and seller notification.
+6. Start another test order and select UPI.
+7. Confirm a Razorpay payment link is generated for the exact order total.
+8. Configure Razorpay's webhook endpoint as `POST /razorpay/webhook` and use the configured webhook secret.
+9. Complete a Razorpay test payment and verify the webhook changes the order to `CONFIRMED`.
+10. Verify duplicate WhatsApp/Razorpay webhook deliveries do not create duplicate processing or notifications.
+11. Exercise admin order status changes through `PACKING -> OUT_FOR_DELIVERY -> DELIVERED`.
+12. Only after all test-mode checks pass, replace test credentials with live credentials and repeat a controlled low-value live transaction.
+
+The application cannot perform these external-provider checks from CI because they require real Meta/Razorpay credentials and provider-side configuration.
