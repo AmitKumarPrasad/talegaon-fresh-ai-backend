@@ -105,3 +105,8 @@ def get_customer_order(order_id: int, customer_id: str):
     if not order or order["customer_id"] != customer_id:
         return None
     return order
+
+
+def transition_order_status(order_id: int, status: str) -> bool:
+    from app.order_status import transition_order
+    return transition_order(order_id, status)
