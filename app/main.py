@@ -57,3 +57,7 @@ async def receive_webhook(request: Request) -> dict:
 
     send_result = send_text_message(customer_id, response)
     return {"status": "processed", "reply": response, "whatsapp": send_result, "conversation_step": state.step}
+
+
+# Order persistence and minimum-order validation are exposed as service-layer functions.
+# Webhook wiring will be added after database connectivity is configured and verified.
