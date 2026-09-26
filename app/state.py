@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 class ConversationState:
     step: str = "menu"
     cart: list[dict] = field(default_factory=list)
+    pending_order_id: int | None = None
+    status_order_lookup: bool = False
 
 
 _SESSIONS: dict[str, ConversationState] = {}
