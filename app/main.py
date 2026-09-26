@@ -20,10 +20,11 @@ from app.order_flow import process_order_message
 from app.payment_service import PaymentError, create_payment_link, extract_paid_event, verify_webhook_signature
 from app.seller_notification import notify_seller
 from app.state import get_state, reset_state
+from app.webhook_idempotency import claim_event
 from app.whatsapp import send_text_message
 
 load_dotenv()
-app = FastAPI(title="Talegaon Fresh AI Agent", version="0.6.0")
+app = FastAPI(title="Talegaon Fresh AI Agent", version="0.7.0")
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN")
 
 
@@ -50,13 +51,17 @@ async def verify_webhook(request: Request):
     return PlainTextResponse("Verification failed", status_code=403)
 
 
-def extract_message(body: dict) -> tuple[str | None, str | None]:
+def extract_message(body: dict) -> tuple[str | None, str | None, str | None]:
     try:
         value = body["entry"][0]["changes"][0]["value"]
         message = value["messages"][0]
-        return message.get("from"), message.get("text", {}).get("body")
+        return (
+            message.get("from"),
+            message.get("text", {}).get("body"),
+            message.get("id"),
+        )
     except (KeyError, IndexError, TypeError):
-        return None, None
+        return None, None, None
 
 
 def _payment_method(message: str) -> str | None:
@@ -194,9 +199,13 @@ def handle_conversation(customer_id: str, message: str) -> str:
 @app.post("/webhook")
 async def receive_webhook(request: Request):
     body = await request.json()
-    customer_id, message = extract_message(body)
+    customer_id, message, message_id = extract_message(body)
     if not customer_id or not message:
         return {"status": "ignored"}
+    if not message_id:
+        return {"status": "ignored", "reason": "missing_message_id"}
+    if not claim_event("whatsapp", message_id):
+        return {"status": "duplicate"}
 
     reply = handle_conversation(customer_id, message)
     send_text_message(customer_id, reply)
@@ -218,6 +227,12 @@ async def razorpay_webhook(request: Request):
     event = extract_paid_event(payload)
     if not event:
         return {"status": "ignored"}
+
+    event_id = event.get("event_id")
+    if not event_id:
+        return PlainTextResponse("Missing event ID", status_code=400)
+    if not claim_event("razorpay", event_id):
+        return {"status": "duplicate"}
 
     try:
         order_id = int(str(event["reference_id"]).removeprefix("TF-"))
