@@ -1,5 +1,5 @@
 from app.catalog import PRODUCTS
-from app.db import Base, SessionLocal, engine
+from app.db import SessionLocal
 from app.models import ProductModel
 
 # Development seed values only. Replace with current business prices.
@@ -12,7 +12,6 @@ SEED_PRICES = {
 }
 
 def seed_products() -> None:
-    Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         for product in PRODUCTS:
