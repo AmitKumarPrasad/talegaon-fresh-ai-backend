@@ -5,6 +5,7 @@ import re
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel, Field
 
 from app.catalog import product_menu
 from app.menu import MENU
@@ -17,6 +18,7 @@ from app.order_details import (
     update_payment,
 )
 from app.order_flow import process_order_message
+from app.price_service import list_current_prices, price_history, update_product_price
 from app.payment_service import PaymentError, create_payment_link, extract_paid_event, verify_webhook_signature
 from app.seller_notification import notify_seller
 from app.state import get_state, reset_state
@@ -49,6 +51,44 @@ async def verify_webhook(request: Request):
     if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == VERIFY_TOKEN:
         return PlainTextResponse(params.get("hub.challenge") or "")
     return PlainTextResponse("Verification failed", status_code=403)
+
+
+
+class PriceUpdateRequest(BaseModel):
+    price: float = Field(gt=0)
+    in_stock: bool | None = None
+
+
+def _admin_authorized(request: Request) -> bool:
+    configured = os.getenv("ADMIN_API_TOKEN")
+    return bool(configured) and request.headers.get("X-Admin-Token") == configured
+
+
+@app.get("/admin/prices")
+async def admin_prices(request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    return {"products": list_current_prices()}
+
+
+@app.put("/admin/prices/{product_id}")
+async def admin_update_price(product_id: int, payload: PriceUpdateRequest, request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    try:
+        product = update_product_price(product_id, payload.price, payload.in_stock)
+    except ValueError as exc:
+        return PlainTextResponse(str(exc), status_code=400)
+    if not product:
+        return PlainTextResponse("Product not found", status_code=404)
+    return product
+
+
+@app.get("/admin/prices/{product_id}/history")
+async def admin_price_history(product_id: int, request: Request, limit: int = 30):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    return {"product_id": product_id, "history": price_history(product_id, limit)}
 
 
 def extract_message(body: dict) -> tuple[str | None, str | None, str | None]:

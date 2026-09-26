@@ -41,3 +41,19 @@ For an existing database already created with the legacy SQL files, verify that 
 alembic stamp head
 ```
 Do not stamp an unverified database; back up production data first.
+
+
+## Daily product prices
+
+Set `ADMIN_API_TOKEN` in the environment. Send it as the `X-Admin-Token` header when managing prices.
+
+- `GET /admin/prices` — view current product prices and stock
+- `PUT /admin/prices/{product_id}` — update price and optional stock state
+- `GET /admin/prices/{product_id}/history` — view recent price changes
+
+Example request body:
+```json
+{"price": 55.0, "in_stock": true}
+```
+
+Customer orders always calculate totals from the current database price; the AI does not choose prices.
