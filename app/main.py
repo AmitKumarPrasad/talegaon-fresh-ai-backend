@@ -8,6 +8,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.catalog import product_menu
+from app.config import validate_production_config
 from app.menu import MENU
 from app.openai_service import generate_reply
 from app.order_details import (
@@ -28,11 +29,17 @@ from app.whatsapp import send_text_message
 load_dotenv()
 app = FastAPI(title="Talegaon Fresh AI Agent", version="0.7.0")
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN")
+validate_production_config()
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"service": "Talegaon Fresh AI Agent", "status": "running"}
 
 
 @app.get("/")
-def health() -> dict:
-    return {"service": "Talegaon Fresh AI Agent", "status": "running"}
+def root() -> dict:
+    return health()
 
 
 @app.get("/menu")
