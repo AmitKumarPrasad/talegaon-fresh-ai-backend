@@ -18,3 +18,6 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m compileall app
       - run: alembic upgrade head
+      - run: python -m unittest discover -s tests -p 'test_production_config.py'
+      - run: python -m unittest discover -s tests -p 'test_price_management.py'
+      - run: docker build -t talegaon-fresh-ai-backend:ci .

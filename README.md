@@ -57,3 +57,13 @@ Example request body:
 ```
 
 Customer orders always calculate totals from the current database price; the AI does not choose prices.
+
+## Production deployment
+
+Build the image with Docker and provide production environment variables at runtime. The image runs Alembic migrations before starting FastAPI and listens on 0.0.0.0 using PORT.
+
+Health endpoint: GET /health
+
+Set ENVIRONMENT=production in production. The application then requires its production configuration and rejects SQLite.
+
+For a multi-instance deployment, run Alembic as a separate release or migration job rather than concurrently from every application instance.
