@@ -67,3 +67,19 @@ Health endpoint: GET /health
 Set ENVIRONMENT=production in production. The application then requires its production configuration and rejects SQLite.
 
 For a multi-instance deployment, run Alembic as a separate release or migration job rather than concurrently from every application instance.
+
+
+## Seller/admin order operations
+
+Use the same `X-Admin-Token` header for protected order operations.
+
+- `GET /admin/orders` — list recent orders; optional `status`, `limit`, and `offset` filters
+- `GET /admin/orders/{order_id}` — view order details, items, payment, address, and allowed next statuses
+- `PATCH /admin/orders/{order_id}/status` — advance an order through the validated lifecycle
+
+Example status update:
+```json
+{"status":"PACKING"}
+```
+
+Order status changes use the centralized lifecycle rules, so invalid jumps such as `PENDING -> DELIVERED` are rejected.
