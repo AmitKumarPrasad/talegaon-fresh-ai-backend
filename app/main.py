@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
+from app.admin_orders import get_admin_order, list_orders
 from app.catalog import product_menu
 from app.config import validate_production_config
 from app.menu import MENU
@@ -15,6 +16,7 @@ from app.order_details import (
     confirm_upi_payment,
     get_customer_order,
     save_payment_link,
+    transition_order_status,
     update_address,
     update_payment,
 )
@@ -89,6 +91,69 @@ async def admin_update_price(product_id: int, payload: PriceUpdateRequest, reque
     if not product:
         return PlainTextResponse("Product not found", status_code=404)
     return product
+
+
+class OrderStatusUpdateRequest(BaseModel):
+    status: str = Field(min_length=1, max_length=30)
+
+
+@app.get("/admin/orders")
+async def admin_orders(
+    request: Request,
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    if status and status.upper() not in {
+        "PENDING",
+        "ADDRESS_CONFIRMED",
+        "PAYMENT_PENDING",
+        "CONFIRMED",
+        "PACKING",
+        "OUT_FOR_DELIVERY",
+        "DELIVERED",
+        "CANCELLED",
+    }:
+        return PlainTextResponse("Invalid order status", status_code=400)
+    return {
+        "orders": list_orders(status=status, limit=limit, offset=offset),
+        "limit": min(max(limit, 1), 100),
+        "offset": max(offset, 0),
+    }
+
+
+@app.get("/admin/orders/{order_id}")
+async def admin_order(order_id: int, request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    order = get_admin_order(order_id)
+    if not order:
+        return PlainTextResponse("Order not found", status_code=404)
+    return order
+
+
+@app.patch("/admin/orders/{order_id}/status")
+async def admin_update_order_status(
+    order_id: int,
+    payload: OrderStatusUpdateRequest,
+    request: Request,
+):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+
+    order = get_admin_order(order_id)
+    if not order:
+        return PlainTextResponse("Order not found", status_code=404)
+
+    if not transition_order_status(order_id, payload.status):
+        return PlainTextResponse(
+            f"Invalid status transition from {order['status']} to {payload.status.upper()}",
+            status_code=409,
+        )
+
+    return get_admin_order(order_id)
 
 
 @app.get("/admin/prices/{product_id}/history")
