@@ -3,3 +3,5 @@ uvicorn[standard]
 openai
 python-dotenv
 requests
+SQLAlchemy
+pymysql
