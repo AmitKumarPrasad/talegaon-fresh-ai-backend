@@ -68,7 +68,7 @@ def confirm_upi_payment(
         if order.razorpay_payment_link_id and order.razorpay_payment_link_id != payment_link_id:
             return False
         if order.razorpay_payment_id == payment_id and order.status == "CONFIRMED":
-            return True
+            return False
         order.razorpay_payment_link_id = payment_link_id
         order.razorpay_payment_id = payment_id
         order.razorpay_event_id = event_id
