@@ -5,11 +5,12 @@ from fastapi.responses import PlainTextResponse
 from app.catalog import product_menu
 from app.menu import MENU, menu_response
 from app.openai_service import generate_reply
+from app.order_flow import process_order_message
 from app.state import get_state
 from app.whatsapp import send_text_message
 
 load_dotenv()
-app = FastAPI(title="Talegaon Fresh AI Agent", version="0.3.0")
+app = FastAPI(title="Talegaon Fresh AI Agent", version="0.4.0")
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN")
 
 @app.get("/")
@@ -48,16 +49,15 @@ async def receive_webhook(request: Request) -> dict:
 
     state = get_state(customer_id)
     response = menu_response(message)
+
     if response is None:
-        response = generate_reply(message)
-        state.step = "conversation"
+        result = process_order_message(customer_id, message)
+        response = result["message"]
+        if result["status"] == "order_created":
+            state.step = "address"
     elif message.strip() == "2":
         response = f"🥦 Today's Products\n\n{product_menu()}\n\nSend product name and quantity to order."
         state.step = "products"
 
     send_result = send_text_message(customer_id, response)
     return {"status": "processed", "reply": response, "whatsapp": send_result, "conversation_step": state.step}
-
-
-# Order persistence and minimum-order validation are exposed as service-layer functions.
-# Webhook wiring will be added after database connectivity is configured and verified.
