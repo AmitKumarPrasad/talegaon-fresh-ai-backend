@@ -38,3 +38,16 @@ class OrderItemModel(Base):
     quantity: Mapped[float] = mapped_column(Float)
     unit_price: Mapped[float] = mapped_column(Float)
     line_total: Mapped[float] = mapped_column(Float)
+
+
+class ProcessedWebhookModel(Base):
+    __tablename__ = "processed_webhooks"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(30))
+    event_id: Mapped[str] = mapped_column(String(200))
+    processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        __import__("sqlalchemy").UniqueConstraint(
+            "provider", "event_id", name="uq_processed_webhook_provider_event"
+        ),
+    )
