@@ -22,4 +22,5 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_price_management.py'
       - run: python -m unittest discover -s tests -p 'test_admin_orders.py'
       - run: python -m unittest discover -s tests -p 'test_order_status.py'
+      - run: python -m unittest discover -s tests -p 'test_production_e2e_config.py'
       - run: docker build -t talegaon-fresh-ai-backend:ci .
