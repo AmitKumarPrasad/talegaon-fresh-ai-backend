@@ -1,6 +1,10 @@
-from sqlalchemy import Boolean, Float, ForeignKey, Integer, String
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.db import Base
+
 
 class ProductModel(Base):
     __tablename__ = "products"
@@ -10,6 +14,7 @@ class ProductModel(Base):
     price: Mapped[float] = mapped_column(Float)
     in_stock: Mapped[bool] = mapped_column(Boolean, default=True)
 
+
 class OrderModel(Base):
     __tablename__ = "orders"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -18,6 +23,12 @@ class OrderModel(Base):
     total: Mapped[float] = mapped_column(Float, default=0)
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     payment_method: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    payment_link_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    razorpay_payment_link_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
+    razorpay_payment_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
+    razorpay_event_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
+    payment_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
 
 class OrderItemModel(Base):
     __tablename__ = "order_items"
