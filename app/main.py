@@ -83,32 +83,7 @@ def handle_conversation(customer_id: str, message: str) -> str:
         reset_state(customer_id)
         return MENU
 
-    # Explicit menu selections take priority over state-specific parsing.
-    if value == "1":
-        reset_state(customer_id)
-        state = get_state(customer_id)
-        state.step = "products"
-        return "🛒 Let's place your order!\\n\\nSend your items and quantities. Example:\\n2 kg tomato, 1 kg potato, 500 g carrot"
-
-    if value == "2":
-        state.step = "products"
-        return f"🥦 Today's Products\\n\\n{product_menu()}\\n\\nSend product name and quantity to order."
-
-    if value == "3":
-        state.status_order_lookup = True
-        state.step = "order_status"
-        return "🔎 Please send your Talegaon Fresh Order ID to check its status."
-
-    if value == "4":
-        return "🚚 Delivery Information\\n\\nWe provide home delivery in Talegaon and nearby areas. Delivery details are confirmed during your order.\\n\\nReply 1 to place an order."
-
-    if value == "5":
-        return "💳 Payment Options\\n\\n1️⃣ UPI\\n2️⃣ Cash on Delivery\\n\\nYour payment method will be confirmed before the order is completed."
-
-    if value == "6":
-        state.step = "support"
-        return "👤 Our team will assist you. Please send your question and we will respond as soon as possible."
-
+    # State-specific input must be handled before numeric menu options.
     if state.step == "order_status":
         order_id = _order_id(value)
         if order_id is None:
@@ -153,6 +128,31 @@ def handle_conversation(customer_id: str, message: str) -> str:
     if state.step == "payment_pending":
         return "💳 Your order is awaiting UPI payment verification. We will confirm it after the payment integration is connected."
 
+    if value == "1":
+        reset_state(customer_id)
+        state = get_state(customer_id)
+        state.step = "products"
+        return "🛒 Let's place your order!\\n\\nSend your items and quantities. Example:\\n2 kg tomato, 1 kg potato, 500 g carrot"
+
+    if value == "2":
+        state.step = "products"
+        return f"🥦 Today's Products\\n\\n{product_menu()}\\n\\nSend product name and quantity to order."
+
+    if value == "3":
+        state.status_order_lookup = True
+        state.step = "order_status"
+        return "🔎 Please send your Talegaon Fresh Order ID to check its status."
+
+    if value == "4":
+        return "🚚 Delivery Information\\n\\nWe provide home delivery in Talegaon and nearby areas. Delivery details are confirmed during your order.\\n\\nReply 1 to place an order."
+
+    if value == "5":
+        return "💳 Payment Options\\n\\n1️⃣ UPI\\n2️⃣ Cash on Delivery\\n\\nYour payment method will be confirmed before the order is completed."
+
+    if value == "6":
+        state.step = "support"
+        return "👤 Our team will assist you. Please send your question and we will respond as soon as possible."
+
     if state.step == "products":
         result = process_order_message(customer_id, value)
         if result["status"] == "order_created":
@@ -169,15 +169,3 @@ def handle_conversation(customer_id: str, message: str) -> str:
         state.step = "address"
     return result["message"]
 
-
-@app.post("/webhook")
-async def receive_webhook(request: Request) -> dict:
-    body = await request.json()
-    customer_id, message = extract_message(body)
-    if not customer_id or not message:
-        return {"status": "ignored"}
-
-    response = handle_conversation(customer_id, message)
-    send_result = send_text_message(customer_id, response)
-    state = get_state(customer_id)
-    return {"status": "processed", "reply": response, "whatsapp": send_result, "conversation_step": state.step}
