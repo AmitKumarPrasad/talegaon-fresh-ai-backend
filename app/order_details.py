@@ -1,18 +1,20 @@
 from app.db import SessionLocal
 from app.models import OrderModel
 
+
 def update_address(order_id: int, address: str) -> bool:
     db = SessionLocal()
     try:
         order = db.get(OrderModel, order_id)
         if not order:
             return False
-        order.address = address
+        order.address = address.strip()
         order.status = "ADDRESS_CONFIRMED"
         db.commit()
         return True
     finally:
         db.close()
+
 
 def update_payment(order_id: int, method: str) -> bool:
     method = method.upper()
@@ -30,6 +32,7 @@ def update_payment(order_id: int, method: str) -> bool:
     finally:
         db.close()
 
+
 def get_order(order_id: int):
     db = SessionLocal()
     try:
@@ -38,6 +41,7 @@ def get_order(order_id: int):
             return None
         return {
             "order_id": order.id,
+            "customer_id": order.customer_id,
             "status": order.status,
             "total": order.total,
             "address": order.address,
@@ -45,3 +49,10 @@ def get_order(order_id: int):
         }
     finally:
         db.close()
+
+
+def get_customer_order(order_id: int, customer_id: str):
+    order = get_order(order_id)
+    if not order or order["customer_id"] != customer_id:
+        return None
+    return order
