@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -51,3 +51,13 @@ class ProcessedWebhookModel(Base):
             "provider", "event_id", name="uq_processed_webhook_provider_event"
         ),
     )
+
+
+
+class ConversationStateModel(Base):
+    __tablename__ = "conversation_states"
+    customer_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    step: Mapped[str] = mapped_column(String(30), default="menu")
+    cart: Mapped[list] = mapped_column(JSON, default=list)
+    pending_order_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status_order_lookup: Mapped[bool] = mapped_column(Boolean, default=False)
