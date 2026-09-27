@@ -7,7 +7,7 @@ WhatsApp AI ordering backend for Talegaon Fresh.
 - FastAPI
 - OpenAI API
 - WhatsApp Cloud API
-- MySQL (next phase)
+- PostgreSQL
 
 ## Local setup
 
@@ -20,7 +20,6 @@ uvicorn app.main:app --reload
 ```
 
 Environment variables are documented in `.env.example`. Never commit secrets.
-
 
 ## Database migrations
 
@@ -41,7 +40,6 @@ For an existing database already created with the legacy SQL files, verify that 
 alembic stamp head
 ```
 Do not stamp an unverified database; back up production data first.
-
 
 ## Daily product prices
 
@@ -64,10 +62,9 @@ Build the image with Docker and provide production environment variables at runt
 
 Health endpoint: GET /health
 
-Set ENVIRONMENT=production in production. The application then requires its production configuration and rejects SQLite.
+Set ENVIRONMENT=production in production. The application then requires its production configuration, including a PostgreSQL DATABASE_URL, and rejects SQLite and non-PostgreSQL production database URLs.
 
 For a multi-instance deployment, run Alembic as a separate release or migration job rather than concurrently from every application instance.
-
 
 ## Seller/admin order operations
 
@@ -84,8 +81,7 @@ Example status update:
 
 Order status changes use the centralized lifecycle rules, so invalid jumps such as `PENDING -> DELIVERED` are rejected.
 
-
-## Step 9 — production WhatsApp and Razorpay E2E checklist
+## Production WhatsApp and Razorpay E2E checklist
 
 Before switching to live payment processing, validate the production integration in Razorpay test mode.
 
@@ -94,7 +90,7 @@ Before switching to live payment processing, validate the production integration
 Set `ENVIRONMENT=production` and configure:
 
 - `OPENAI_API_KEY`
-- `DATABASE_URL` using production MySQL
+- `DATABASE_URL` using PostgreSQL
 - `WHATSAPP_VERIFY_TOKEN`
 - `WHATSAPP_ACCESS_TOKEN`
 - `WHATSAPP_PHONE_NUMBER_ID`
