@@ -4,5 +4,5 @@ openai
 python-dotenv
 requests
 SQLAlchemy
-pymysql
+psycopg2-binary
 alembic
