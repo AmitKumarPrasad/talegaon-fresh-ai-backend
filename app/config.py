@@ -22,5 +22,9 @@ def validate_production_config() -> None:
     missing = [name for name in REQUIRED_PRODUCTION_VARS if not os.getenv(name)]
     if missing:
         raise RuntimeError("Missing required production environment variables: " + ", ".join(missing))
-    if os.getenv("DATABASE_URL", "").startswith("sqlite"):
-        raise RuntimeError("SQLite is not supported for production. Configure MySQL.")
+
+    database_url = os.getenv("DATABASE_URL", "")
+    if database_url.startswith("sqlite"):
+        raise RuntimeError("SQLite is not supported for production. Configure PostgreSQL.")
+    if not database_url.startswith(("postgresql://", "postgres://", "postgresql+psycopg2://")):
+        raise RuntimeError("Production DATABASE_URL must use PostgreSQL.")
