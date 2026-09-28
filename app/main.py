@@ -21,7 +21,13 @@ from app.order_details import (
     update_payment,
 )
 from app.order_flow import process_order_message
-from app.price_service import list_current_prices, price_history, update_product_price
+from app.seed import seed_products
+from app.price_service import (
+    bulk_update_product_prices,
+    list_current_prices,
+    price_history,
+    update_product_price,
+)
 from app.payment_service import PaymentError, create_payment_link, extract_paid_event, verify_webhook_signature
 from app.seller_notification import notify_seller
 from app.state import get_state, reset_state
@@ -66,6 +72,16 @@ async def verify_webhook(request: Request):
 class PriceUpdateRequest(BaseModel):
     price: float = Field(gt=0)
     in_stock: bool | None = None
+
+
+class BulkPriceUpdateItem(BaseModel):
+    product_id: int = Field(gt=0)
+    price: float = Field(gt=0)
+    in_stock: bool | None = None
+
+
+class BulkPriceUpdateRequest(BaseModel):
+    prices: list[BulkPriceUpdateItem] = Field(min_length=1)
 
 
 def _admin_authorized(request: Request) -> bool:
