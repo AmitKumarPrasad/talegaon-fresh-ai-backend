@@ -286,10 +286,28 @@ def handle_conversation(customer_id: str, message: str) -> str:
             reset_state(customer_id)
             return "❌ Order could not be loaded. Please contact us."
         if method == "COD":
-            notify_seller(order_id, customer_id, order["total"], order["address"] or "", method)
+            try:
+                notify_seller(
+                    order_id,
+                    customer_id,
+                    order["total"],
+                    order["address"] or "",
+                    method,
+                )
+            except Exception:
+                logger.exception(
+                    "COD order confirmed but seller notification failed order_id=%s",
+                    order_id,
+                )
             state.step = "menu"
             state.pending_order_id = None
-            return f"✅ Order #{order_id} confirmed!\nTotal: ₹{order['total']:.2f}\nPayment: Cash on Delivery\n\nWe will prepare your order and deliver it to you."
+            return (
+                f"✅ Order #{order_id} confirmed!\n"
+                f"Total: ₹{order['total']:.2f}\n"
+                "Payment: Cash on Delivery\n\n"
+                "We will prepare your order and deliver it to you. "
+                "Please keep the exact amount ready at delivery."
+            )
 
         try:
             link = create_payment_link(order_id, order["total"], customer_id)
