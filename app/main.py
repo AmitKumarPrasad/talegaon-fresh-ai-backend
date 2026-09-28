@@ -9,6 +9,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.admin_orders import get_admin_order, list_orders
+from app.customer_orders import CustomerOrderError, create_customer_order
 from app.catalog import product_menu
 from app.config import validate_production_config
 from app.menu import MENU
@@ -69,6 +70,39 @@ async def verify_webhook(request: Request):
         return PlainTextResponse(params.get("hub.challenge") or "")
     return PlainTextResponse("Verification failed", status_code=403)
 
+
+
+class CustomerOrderItem(BaseModel):
+    product: str = Field(min_length=1, max_length=100)
+    quantity: float = Field(gt=0)
+
+
+class CustomerOrderRequest(BaseModel):
+    customer_id: str = Field(min_length=5, max_length=50)
+    items: list[CustomerOrderItem] = Field(min_length=1)
+    address: str = Field(min_length=10, max_length=500)
+    payment_method: str = Field(min_length=3, max_length=20)
+
+
+@app.post("/orders")
+async def create_mobile_order(payload: CustomerOrderRequest):
+    try:
+        return create_customer_order(
+            customer_id=payload.customer_id,
+            items=[item.model_dump() for item in payload.items],
+            address=payload.address,
+            payment_method=payload.payment_method,
+        )
+    except CustomerOrderError as exc:
+        return PlainTextResponse(str(exc), status_code=400)
+
+
+@app.get("/orders/{order_id}")
+async def get_mobile_order(order_id: int, customer_id: str):
+    order = get_customer_order(order_id, customer_id)
+    if not order:
+        return PlainTextResponse("Order not found", status_code=404)
+    return {"order": order}
 
 
 class PriceUpdateRequest(BaseModel):
