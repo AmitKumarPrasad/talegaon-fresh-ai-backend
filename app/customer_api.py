@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.auth import current_customer, request_otp, verify_otp
@@ -79,7 +79,7 @@ def auth_verify(payload: OtpVerify):
 
 
 @router.get("/customers/me")
-def get_me(customer: CustomerModel = current_customer()):
+def get_me(customer: CustomerModel = Depends(current_customer)):
     return {"phone": customer.phone, "name": customer.name}
 
 
