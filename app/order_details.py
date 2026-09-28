@@ -94,7 +94,13 @@ def get_order(order_id: int):
             "address": order.address,
             "payment_method": order.payment_method,
             "payment_link_url": order.payment_link_url,
+            "razorpay_payment_link_id": order.razorpay_payment_link_id,
             "razorpay_payment_id": order.razorpay_payment_id,
+            "payment_verified_at": (
+                order.payment_verified_at.isoformat()
+                if order.payment_verified_at
+                else None
+            ),
         }
     finally:
         db.close()
