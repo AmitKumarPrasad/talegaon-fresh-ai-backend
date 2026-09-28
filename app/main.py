@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 
@@ -35,6 +36,7 @@ from app.webhook_idempotency import claim_event
 from app.whatsapp import send_text_message
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 app = FastAPI(title="Talegaon Fresh AI Agent", version="0.7.0")
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN")
 validate_production_config()
@@ -368,48 +370,159 @@ async def receive_webhook(request: Request):
 async def razorpay_webhook(request: Request):
     raw_body = await request.body()
     signature = request.headers.get("X-Razorpay-Signature")
+
     if not verify_webhook_signature(raw_body, signature):
+        logger.warning(
+            "Razorpay webhook rejected: invalid signature; signature_present=%s body_bytes=%s",
+            bool(signature),
+            len(raw_body),
+        )
         return PlainTextResponse("Invalid signature", status_code=400)
 
     try:
         payload = json.loads(raw_body)
     except json.JSONDecodeError:
+        logger.warning("Razorpay webhook rejected: invalid JSON")
         return PlainTextResponse("Invalid JSON", status_code=400)
 
     event = extract_paid_event(payload)
     if not event:
+        logger.info(
+            "Razorpay webhook ignored: unsupported or incomplete event type=%s event_id=%s",
+            payload.get("event"),
+            payload.get("id"),
+        )
         return {"status": "ignored"}
 
     event_id = event.get("event_id")
     if not event_id:
+        logger.warning(
+            "Razorpay webhook rejected: missing event ID event_type=%s",
+            event.get("event"),
+        )
         return PlainTextResponse("Missing event ID", status_code=400)
-    if not claim_event("razorpay", event_id):
-        return {"status": "duplicate"}
 
     try:
         order_id = int(str(event["reference_id"]).removeprefix("TF-"))
-    except ValueError:
+    except (TypeError, ValueError):
+        logger.warning(
+            "Razorpay webhook ignored: invalid reference_id=%s event_id=%s",
+            event.get("reference_id"),
+            event_id,
+        )
         return {"status": "ignored"}
 
-    if event["event"] == "payment_link.paid" and event["status"] == "captured":
-        confirmed = confirm_upi_payment(
-            order_id=order_id,
-            payment_link_id=event["payment_link_id"],
-            payment_id=event["payment_id"],
-            event_id=event["event_id"],
-            amount_paise=event["amount"],
+    if event["event"] != "payment_link.paid" or event["status"] != "captured":
+        logger.info(
+            "Razorpay webhook ignored: event=%s status=%s order_id=%s event_id=%s",
+            event["event"],
+            event["status"],
+            order_id,
+            event_id,
         )
-        if confirmed:
-            order = get_customer_order(order_id, _customer_for_order(order_id))
-            if order:
-                customer_id = order["customer_id"]
-                notify_seller(order_id, customer_id, order["total"], order["address"] or "", "UPI")
-                send_text_message(
-                    customer_id,
-                    f"✅ Payment received for Order #{order_id}. Your UPI payment is verified and the order is confirmed.\nTotal: ₹{order['total']:.2f}",
-                )
+        return {"status": "ignored"}
 
+    order = _order_for_payment(order_id)
+    if not order:
+        logger.error(
+            "Razorpay webhook ignored: order not found order_id=%s event_id=%s",
+            order_id,
+            event_id,
+        )
+        return {"status": "ignored"}
+
+    expected_amount = int(round(order["total"] * 100))
+    if order["payment_method"] != "UPI":
+        logger.error(
+            "Razorpay webhook ignored: order payment method is %s order_id=%s",
+            order["payment_method"],
+            order_id,
+        )
+        return {"status": "ignored"}
+
+    if event["amount"] != expected_amount:
+        logger.error(
+            "Razorpay webhook ignored: amount mismatch order_id=%s expected_paise=%s received_paise=%s event_id=%s",
+            order_id,
+            expected_amount,
+            event["amount"],
+            event_id,
+        )
+        return {"status": "ignored"}
+
+    if (
+        order["razorpay_payment_link_id"]
+        and order["razorpay_payment_link_id"] != event["payment_link_id"]
+    ):
+        logger.error(
+            "Razorpay webhook ignored: payment link mismatch order_id=%s event_id=%s",
+            order_id,
+            event_id,
+        )
+        return {"status": "ignored"}
+
+    if not claim_event("razorpay", event_id):
+        logger.info("Razorpay webhook duplicate event_id=%s", event_id)
+        return {"status": "duplicate"}
+
+    confirmed = confirm_upi_payment(
+        order_id=order_id,
+        payment_link_id=event["payment_link_id"],
+        payment_id=event["payment_id"],
+        event_id=event_id,
+        amount_paise=event["amount"],
+    )
+
+    if not confirmed:
+        logger.info(
+            "Razorpay payment already processed or could not be confirmed order_id=%s payment_id=%s event_id=%s",
+            order_id,
+            event["payment_id"],
+            event_id,
+        )
+        return {"status": "processed"}
+
+    customer_id = order["customer_id"]
+
+    try:
+        notify_seller(
+            order_id,
+            customer_id,
+            order["total"],
+            order["address"] or "",
+            "UPI",
+        )
+    except Exception:
+        logger.exception(
+            "Razorpay payment confirmed but seller notification failed order_id=%s",
+            order_id,
+        )
+
+    try:
+        send_text_message(
+            customer_id,
+            f"✅ Payment received for Order #{order_id}. Your UPI payment is verified and the order is confirmed.\nTotal: ₹{order['total']:.2f}",
+        )
+    except Exception:
+        logger.exception(
+            "Razorpay payment confirmed but customer notification failed order_id=%s",
+            order_id,
+        )
+
+    logger.info(
+        "Razorpay payment confirmed successfully order_id=%s amount_paise=%s payment_id=%s event_id=%s",
+        order_id,
+        event["amount"],
+        event["payment_id"],
+        event_id,
+    )
     return {"status": "processed"}
+
+
+def _order_for_payment(order_id: int) -> dict | None:
+    from app.order_details import get_order
+
+    return get_order(order_id)
 
 
 def _customer_for_order(order_id: int) -> str:
