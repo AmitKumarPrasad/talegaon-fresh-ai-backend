@@ -70,7 +70,7 @@ def extract_paid_event(payload: dict[str, Any]) -> dict[str, Any] | None:
         return None
     return {
         "event": payload.get("event"),
-        "event_id": payload.get("id"),
+        "event_id": payload.get("id") or f"{payload.get('event')}:{payment_id}",
         "reference_id": reference_id,
         "payment_link_id": link_id,
         "payment_id": payment_id,
