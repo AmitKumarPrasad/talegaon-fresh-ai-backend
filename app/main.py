@@ -80,6 +80,30 @@ async def admin_prices(request: Request):
     return {"products": list_current_prices()}
 
 
+@app.post("/admin/products/seed")
+async def admin_seed_products(request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    seed_products()
+    return {"products": list_current_prices(), "message": "Missing catalog products were initialized."}
+
+
+@app.put("/admin/prices/bulk")
+async def admin_bulk_update_prices(
+    payload: BulkPriceUpdateRequest,
+    request: Request,
+):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    try:
+        products = bulk_update_product_prices(
+            [item.model_dump() for item in payload.prices]
+        )
+    except ValueError as exc:
+        return PlainTextResponse(str(exc), status_code=400)
+    return {"products": products, "message": "Daily prices updated successfully."}
+
+
 @app.put("/admin/prices/{product_id}")
 async def admin_update_price(product_id: int, payload: PriceUpdateRequest, request: Request):
     if not _admin_authorized(request):
