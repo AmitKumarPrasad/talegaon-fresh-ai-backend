@@ -21,7 +21,13 @@ from app.order_details import (
     update_payment,
 )
 from app.order_flow import process_order_message
-from app.price_service import list_current_prices, price_history, update_product_price
+from app.seed import seed_products
+from app.price_service import (
+    bulk_update_product_prices,
+    list_current_prices,
+    price_history,
+    update_product_price,
+)
 from app.payment_service import PaymentError, create_payment_link, extract_paid_event, verify_webhook_signature
 from app.seller_notification import notify_seller
 from app.state import get_state, reset_state
@@ -68,6 +74,16 @@ class PriceUpdateRequest(BaseModel):
     in_stock: bool | None = None
 
 
+class BulkPriceUpdateItem(BaseModel):
+    product_id: int = Field(gt=0)
+    price: float = Field(gt=0)
+    in_stock: bool | None = None
+
+
+class BulkPriceUpdateRequest(BaseModel):
+    prices: list[BulkPriceUpdateItem] = Field(min_length=1)
+
+
 def _admin_authorized(request: Request) -> bool:
     configured = os.getenv("ADMIN_API_TOKEN")
     return bool(configured) and request.headers.get("X-Admin-Token") == configured
@@ -78,6 +94,30 @@ async def admin_prices(request: Request):
     if not _admin_authorized(request):
         return PlainTextResponse("Unauthorized", status_code=401)
     return {"products": list_current_prices()}
+
+
+@app.post("/admin/products/seed")
+async def admin_seed_products(request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    seed_products()
+    return {"products": list_current_prices(), "message": "Missing catalog products were initialized."}
+
+
+@app.put("/admin/prices/bulk")
+async def admin_bulk_update_prices(
+    payload: BulkPriceUpdateRequest,
+    request: Request,
+):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    try:
+        products = bulk_update_product_prices(
+            [item.model_dump() for item in payload.prices]
+        )
+    except ValueError as exc:
+        return PlainTextResponse(str(exc), status_code=400)
+    return {"products": products, "message": "Daily prices updated successfully."}
 
 
 @app.put("/admin/prices/{product_id}")
