@@ -36,6 +36,9 @@ def setup_module():
 def test_auth_and_addresses():
     token = auth()
     headers = {"Authorization": f"Bearer {token}"}
+    me = client.get("/customers/me", headers=headers)
+    assert me.status_code == 200
+    assert me.json() == {"phone": "919999999999", "name": "Test User"}
     created = client.post("/customers/me/addresses", headers=headers, json={
         "label": "Home", "address": "Main Road", "city": "Talegaon", "pincode": "410507", "is_default": True
     })

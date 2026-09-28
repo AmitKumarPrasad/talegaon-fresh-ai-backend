@@ -2,10 +2,11 @@ import os
 import unittest
 from unittest.mock import MagicMock, patch
 
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 from app.admin_orders import get_admin_order, list_orders
-from app.main import admin_order, admin_orders, admin_update_order_status
+from app.main import admin_order, admin_orders, admin_update_order_status, app
 
 
 def make_request(token: str | None = None) -> Request:
@@ -61,6 +62,13 @@ class AdminOrderServiceTests(unittest.TestCase):
 
 
 class AdminOrderEndpointTests(unittest.IsolatedAsyncioTestCase):
+    async def test_customer_routes_are_registered(self):
+        client = TestClient(app)
+        me = client.get("/customers/me")
+        addresses = client.get("/customers/me/addresses")
+        self.assertEqual(me.status_code, 401)
+        self.assertEqual(addresses.status_code, 401)
+
     async def test_admin_order_requires_token(self):
         os.environ["ADMIN_API_TOKEN"] = "secret"
         response = await admin_order(7, make_request("wrong"))

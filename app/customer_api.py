@@ -84,7 +84,7 @@ def get_me(customer: CustomerModel = Depends(current_customer)):
 
 
 @router.get("/customers/me/addresses")
-def list_addresses(customer: CustomerModel = current_customer()):
+def list_addresses(customer: CustomerModel = Depends(current_customer)):
     db = SessionLocal()
     try:
         rows = db.query(AddressModel).filter(AddressModel.customer_id == customer.phone).order_by(AddressModel.is_default.desc(), AddressModel.id.asc()).all()
@@ -94,7 +94,7 @@ def list_addresses(customer: CustomerModel = current_customer()):
 
 
 @router.post("/customers/me/addresses")
-def create_address(payload: AddressRequest, customer: CustomerModel = current_customer()):
+def create_address(payload: AddressRequest, customer: CustomerModel = Depends(current_customer)):
     db = SessionLocal()
     try:
         if payload.is_default:
@@ -109,7 +109,11 @@ def create_address(payload: AddressRequest, customer: CustomerModel = current_cu
 
 
 @router.put("/customers/me/addresses/{address_id}")
-def update_address_api(address_id: int, payload: AddressRequest, customer: CustomerModel = current_customer()):
+def update_address_api(
+    address_id: int,
+    payload: AddressRequest,
+    customer: CustomerModel = Depends(current_customer),
+):
     db = SessionLocal()
     try:
         row = db.get(AddressModel, address_id)
@@ -127,7 +131,7 @@ def update_address_api(address_id: int, payload: AddressRequest, customer: Custo
 
 
 @router.delete("/customers/me/addresses/{address_id}")
-def delete_address(address_id: int, customer: CustomerModel = current_customer()):
+def delete_address(address_id: int, customer: CustomerModel = Depends(current_customer)):
     db = SessionLocal()
     try:
         row = db.get(AddressModel, address_id)
@@ -145,7 +149,7 @@ def _cart_response(db, customer: CustomerModel) -> dict:
 
 
 @router.get("/customers/me/cart")
-def get_cart(customer: CustomerModel = current_customer()):
+def get_cart(customer: CustomerModel = Depends(current_customer)):
     db = SessionLocal()
     try:
         row = db.get(CustomerModel, customer.phone)
@@ -155,7 +159,7 @@ def get_cart(customer: CustomerModel = current_customer()):
 
 
 @router.put("/customers/me/cart")
-def replace_cart(payload: CartRequest, customer: CustomerModel = current_customer()):
+def replace_cart(payload: CartRequest, customer: CustomerModel = Depends(current_customer)):
     db = SessionLocal()
     try:
         row = db.get(CustomerModel, customer.phone)
@@ -168,7 +172,7 @@ def replace_cart(payload: CartRequest, customer: CustomerModel = current_custome
 
 
 @router.delete("/customers/me/cart")
-def clear_cart(customer: CustomerModel = current_customer()):
+def clear_cart(customer: CustomerModel = Depends(current_customer)):
     db = SessionLocal()
     try:
         row = db.get(CustomerModel, customer.phone)
@@ -180,7 +184,7 @@ def clear_cart(customer: CustomerModel = current_customer()):
 
 
 @router.post("/customers/me/orders")
-def create_order(payload: OrderRequest, customer: CustomerModel = current_customer()):
+def create_order(payload: OrderRequest, customer: CustomerModel = Depends(current_customer)):
     db = SessionLocal()
     try:
         address = payload.address
@@ -219,7 +223,7 @@ def create_order(payload: OrderRequest, customer: CustomerModel = current_custom
 
 
 @router.get("/customers/me/orders")
-def list_customer_orders(customer: CustomerModel = current_customer()):
+def list_customer_orders(customer: CustomerModel = Depends(current_customer)):
     db = SessionLocal()
     try:
         orders = db.query(OrderModel).filter(OrderModel.customer_id == customer.phone).order_by(OrderModel.id.desc()).all()
