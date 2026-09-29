@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 from starlette.requests import Request
 
 from app.admin_orders import get_admin_order, list_orders
+from app.price_service import list_inventory, update_inventory
+
 from app.main import (
     admin_inventory,
     admin_order,
