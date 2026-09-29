@@ -82,6 +82,7 @@ class CustomerModel(Base):
     otp_request_count: Mapped[int] = mapped_column(Integer, default=0)
     otp_failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
     otp_locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    auth_version: Mapped[int] = mapped_column(Integer, default=1)
     cart: Mapped[list] = mapped_column(JSON, default=list)
 
 

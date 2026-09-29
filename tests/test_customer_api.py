@@ -96,3 +96,14 @@ def test_otp_invalid_attempt_lockout():
     assert locked.status_code == 429
     requested_again = client.post("/auth/request-otp", json={"phone": phone})
     assert requested_again.status_code == 429
+
+
+def test_logout_revokes_existing_token():
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    before = client.get("/customers/me", headers=headers)
+    assert before.status_code == 200
+    logged_out = client.post("/auth/logout", headers=headers)
+    assert logged_out.status_code == 200
+    revoked = client.get("/customers/me", headers=headers)
+    assert revoked.status_code == 401

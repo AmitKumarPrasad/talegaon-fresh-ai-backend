@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.auth import current_customer, request_otp, verify_otp
+from app.auth import current_customer, logout_customer, request_otp, verify_otp
 from app.db import SessionLocal
 from app.models import AddressModel, CustomerModel, OrderItemModel, OrderModel, ProductModel
 
@@ -76,6 +76,12 @@ def auth_request(payload: OtpRequest):
 @router.post("/auth/verify-otp")
 def auth_verify(payload: OtpVerify):
     return verify_otp(payload.phone, payload.otp, payload.name)
+
+
+@router.post("/auth/logout")
+def auth_logout(customer: CustomerModel = Depends(current_customer)):
+    logout_customer(customer)
+    return {"status": "logged_out"}
 
 
 @router.get("/customers/me")
