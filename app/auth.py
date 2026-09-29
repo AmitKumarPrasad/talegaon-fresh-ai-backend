@@ -31,11 +31,12 @@ def _ub64(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
 
 
-def create_token(phone: str, name: str) -> str:
+def create_token(phone: str, name: str, auth_version: int = 1) -> str:
     header = _b64(b'{"alg":"HS256","typ":"JWT"}')
     payload = _b64(json.dumps({
         "sub": phone,
         "name": name,
+        "ver": auth_version,
         "iat": int(datetime.now(timezone.utc).timestamp()),
         "exp": int((datetime.now(timezone.utc) + timedelta(days=30)).timestamp()),
     }, separators=(",", ":")).encode())
@@ -71,6 +72,8 @@ def current_customer(authorization: str | None = Header(default=None)) -> Custom
         customer = db.get(CustomerModel, data["sub"])
         if not customer:
             raise HTTPException(status_code=401, detail="Customer not found")
+        if int(data.get("ver", 0)) != customer.auth_version:
+            raise HTTPException(status_code=401, detail="Session revoked")
         return customer
     finally:
         db.close()
@@ -165,6 +168,18 @@ def verify_otp(phone: str, otp: str, name: str | None = None) -> dict:
         customer.otp_request_count = 0
         customer.otp_window_started_at = None
         db.commit()
-        return {"token": create_token(customer.phone, customer.name), "customer": {"phone": customer.phone, "name": customer.name}}
+        return {"token": create_token(customer.phone, customer.name, customer.auth_version), "customer": {"phone": customer.phone, "name": customer.name}}
+    finally:
+        db.close()
+
+
+def logout_customer(customer: CustomerModel) -> None:
+    db = SessionLocal()
+    try:
+        row = db.get(CustomerModel, customer.phone)
+        if not row:
+            return
+        row.auth_version += 1
+        db.commit()
     finally:
         db.close()
