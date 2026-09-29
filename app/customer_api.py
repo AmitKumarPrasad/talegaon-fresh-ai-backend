@@ -65,6 +65,7 @@ def _order_dict(db, order: OrderModel) -> dict:
         "address": order.address,
         "payment_method": order.payment_method,
         "payment_link_url": order.payment_link_url,
+        "created_at": order.created_at.isoformat(),
         "items": [
             {"name": i.product_name, "quantity": i.quantity, "unit_price": i.unit_price, "line_total": i.line_total}
             for i in items
