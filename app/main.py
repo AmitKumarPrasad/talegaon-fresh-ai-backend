@@ -70,7 +70,7 @@ def get_menu() -> dict:
 
 @app.get("/products")
 def get_products() -> dict:
-    return {"products": product_menu()}
+    return {"products": list_current_prices()}
 
 
 @app.get("/webhook")
