@@ -48,6 +48,53 @@ def test_auth_and_addresses():
     assert deleted.status_code == 200
 
 
+def test_address_update_reassigns_default_and_blocks_other_customer():
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    first = client.post("/customers/me/addresses", headers=headers, json={
+        "label": "Home", "address": "Main Road", "city": "Talegaon",
+        "pincode": "410507", "is_default": True
+    })
+    assert first.status_code == 200
+    first_id = first.json()["address"]["id"]
+
+    second = client.post("/customers/me/addresses", headers=headers, json={
+        "label": "Office", "address": "Market Road", "city": "Talegaon",
+        "pincode": "410507", "is_default": False
+    })
+    assert second.status_code == 200
+    second_id = second.json()["address"]["id"]
+
+    updated = client.put(
+        f"/customers/me/addresses/{second_id}",
+        headers=headers,
+        json={
+            "label": "Office", "address": "Market Road", "city": "Talegaon",
+            "pincode": "410507", "is_default": True
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["address"]["is_default"] is True
+
+    listed = client.get("/customers/me/addresses", headers=headers)
+    assert listed.status_code == 200
+    rows = {row["id"]: row for row in listed.json()["addresses"]}
+    assert rows[first_id]["is_default"] is False
+    assert rows[second_id]["is_default"] is True
+
+    other_token = auth()
+    other_headers = {"Authorization": f"Bearer {other_token}"}
+    forbidden = client.put(
+        f"/customers/me/addresses/{second_id}",
+        headers=other_headers,
+        json={
+            "label": "Other", "address": "Other Road", "city": "Talegaon",
+            "pincode": "410507", "is_default": True
+        },
+    )
+    assert forbidden.status_code == 404
+
+
 def test_cart_and_orders():
     token = auth()
     headers = {"Authorization": f"Bearer {token}"}
