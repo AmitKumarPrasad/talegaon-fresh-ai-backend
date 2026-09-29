@@ -291,3 +291,4 @@ def test_failed_order_rolls_back_stock_reservation():
     assert product.stock_quantity == 10
     assert product.in_stock is True
     db.close()
+
