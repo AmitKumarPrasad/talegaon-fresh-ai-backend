@@ -12,6 +12,7 @@ from fastapi import Header, HTTPException
 from app.db import SessionLocal
 from app.models import CustomerModel
 from app.sms_service import send_sms
+from app.whatsapp import send_text_message
 
 logger = logging.getLogger(__name__)
 
@@ -126,10 +127,15 @@ def request_otp(phone: str, name: str | None = None) -> dict:
         customer.otp_locked_until = None
         db.commit()
         result = {"message": "OTP requested", "expires_in_seconds": OTP_TTL_MINUTES * 60}
+        otp_message = f"Your Talegaon Fresh OTP is {otp}. It expires in {OTP_TTL_MINUTES} minutes."
         try:
-            send_sms(phone, f"Your Talegaon Fresh OTP is {otp}. It expires in {OTP_TTL_MINUTES} minutes.")
+            send_sms(phone, otp_message)
         except Exception:
             logger.exception("Failed to send OTP SMS to %s", phone)
+        try:
+            send_text_message(phone, otp_message)
+        except Exception:
+            logger.exception("Failed to send OTP WhatsApp message to %s", phone)
         if os.getenv("ENVIRONMENT", "development").lower() != "production":
             result["demo_otp"] = otp
         return result
