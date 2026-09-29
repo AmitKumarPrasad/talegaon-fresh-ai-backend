@@ -5,13 +5,14 @@ import re
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.admin_orders import get_admin_order, list_orders
 from app.customer_api import router as customer_router
 from app.catalog import product_menu
-from app.config import validate_production_config
+from app.config import get_cors_allowed_origins, validate_production_config
 from app.menu import MENU
 from app.openai_service import generate_reply
 from app.order_details import (
@@ -40,6 +41,13 @@ from app.whatsapp import send_text_message
 load_dotenv()
 logger = logging.getLogger(__name__)
 app = FastAPI(title="Talegaon Fresh AI Agent", version="0.8.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_allowed_origins(),
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(customer_router)
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN")
 validate_production_config()
