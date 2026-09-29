@@ -70,3 +70,23 @@ class ConversationStateModel(Base):
     cart: Mapped[list] = mapped_column(JSON, default=list)
     pending_order_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status_order_lookup: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class CustomerModel(Base):
+    __tablename__ = "customers"
+    phone: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), default="Customer")
+    otp_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    otp_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cart: Mapped[list] = mapped_column(JSON, default=list)
+
+
+class AddressModel(Base):
+    __tablename__ = "addresses"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.phone"), index=True)
+    label: Mapped[str] = mapped_column(String(50))
+    address: Mapped[str] = mapped_column(String(500))
+    city: Mapped[str] = mapped_column(String(100))
+    pincode: Mapped[str] = mapped_column(String(6))
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
