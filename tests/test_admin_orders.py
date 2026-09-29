@@ -5,7 +5,13 @@ from unittest.mock import MagicMock, patch
 from starlette.requests import Request
 
 from app.admin_orders import get_admin_order, list_orders
-from app.main import admin_order, admin_orders, admin_update_order_status
+from app.main import (
+    admin_inventory,
+    admin_order,
+    admin_orders,
+    admin_update_inventory,
+    admin_update_order_status,
+)
 
 
 def make_request(token: str | None = None) -> Request:
@@ -58,6 +64,31 @@ class AdminOrderServiceTests(unittest.TestCase):
         self.assertEqual(result[0]["order_id"], 7)
         self.assertEqual(result[0]["items"][0]["product"], "Tomato")
         self.assertEqual(result[0]["allowed_next_statuses"], ["CANCELLED", "PACKING"])
+
+
+class AdminInventoryEndpointTests(unittest.IsolatedAsyncioTestCase):
+    async def test_admin_inventory_requires_token(self):
+        os.environ["ADMIN_API_TOKEN"] = "secret"
+        response = await admin_inventory(make_request("wrong"))
+        self.assertEqual(response.status_code, 401)
+
+    @patch("app.main.list_inventory")
+    async def test_admin_inventory_lists_stock(self, list_inventory_mock):
+        os.environ["ADMIN_API_TOKEN"] = "secret"
+        list_inventory_mock.return_value = [{"id": 1, "stock_quantity": 12, "in_stock": True}]
+        response = await admin_inventory(make_request("secret"))
+        self.assertEqual(response["products"][0]["stock_quantity"], 12)
+
+    @patch("app.main.update_inventory")
+    async def test_admin_inventory_updates_stock(self, update_inventory_mock):
+        os.environ["ADMIN_API_TOKEN"] = "secret"
+        update_inventory_mock.return_value = {
+            "id": 1, "stock_quantity": 25, "in_stock": True
+        }
+        payload = type("Payload", (), {"stock_quantity": 25})()
+        response = await admin_update_inventory(1, payload, make_request("secret"))
+        self.assertEqual(response["stock_quantity"], 25)
+        update_inventory_mock.assert_called_once_with(1, 25)
 
 
 class AdminOrderEndpointTests(unittest.IsolatedAsyncioTestCase):
