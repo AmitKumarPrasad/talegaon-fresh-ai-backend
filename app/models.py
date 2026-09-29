@@ -41,6 +41,12 @@ class OrderModel(Base):
     payment_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     stock_reserved: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    delivery_person_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    delivery_person_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    delivery_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
+    delivery_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    delivery_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    delivery_location_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class OrderItemModel(Base):
@@ -51,6 +57,15 @@ class OrderItemModel(Base):
     quantity: Mapped[float] = mapped_column(Float)
     unit_price: Mapped[float] = mapped_column(Float)
     line_total: Mapped[float] = mapped_column(Float)
+
+
+class OrderMessageModel(Base):
+    __tablename__ = "order_messages"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
+    sender: Mapped[str] = mapped_column(String(20))
+    message: Mapped[str] = mapped_column(String(1000))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
 
 class ProcessedWebhookModel(Base):
