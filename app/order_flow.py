@@ -3,7 +3,7 @@ from app.db import SessionLocal
 from app.models import ProductModel
 from app.order_parser import extract_order
 from app.order_service import validate_cart
-from app.order_repository import create_order
+from app.order_repository import InsufficientStockError, create_order
 
 def lookup_prices() -> dict[str, float]:
     db = SessionLocal()
@@ -26,7 +26,14 @@ def process_order_message(customer_id: str, message: str) -> dict:
     if not cart["eligible"]:
         return {"status": "minimum_not_met", "cart": cart, "message": cart["message"]}
 
-    order_id = create_order(customer_id, cart)
+    try:
+        order_id = create_order(customer_id, cart)
+    except InsufficientStockError as exc:
+        return {
+            "status": "out_of_stock",
+            "cart": cart,
+            "message": f"❌ {exc}. Please choose a smaller quantity or another product.",
+        }
     return {
         "status": "order_created",
         "order_id": order_id,
