@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 from app.auth import current_customer, logout_customer, request_otp, verify_otp
 from app.db import SessionLocal
 from app.models import AddressModel, CustomerModel, OrderItemModel, OrderModel, ProductModel
+from app.order_details import get_customer_order
+from app.order_status import get_allowed_transitions
 
 router = APIRouter()
 
@@ -57,6 +59,7 @@ def _order_dict(db, order: OrderModel) -> dict:
         "order_id": order.id,
         "customer_id": order.customer_id,
         "status": order.status,
+        "allowed_next_statuses": sorted(get_allowed_transitions(order.status)),
         "total": order.total,
         "address": order.address,
         "payment_method": order.payment_method,
@@ -222,6 +225,14 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
         return _order_dict(db, order)
     finally:
         db.close()
+
+
+@router.get("/customers/me/orders/{order_id}")
+def get_customer_order_details(order_id: int, customer: CustomerModel = Depends(current_customer)):
+    order = get_customer_order(order_id, customer.phone)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order
 
 
 @router.get("/customers/me/orders")

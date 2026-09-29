@@ -107,3 +107,22 @@ def test_logout_revokes_existing_token():
     assert logged_out.status_code == 200
     revoked = client.get("/customers/me", headers=headers)
     assert revoked.status_code == 401
+
+
+def test_customer_order_tracking_is_scoped_to_customer():
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    order = client.post("/customers/me/orders", headers=headers, json={
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 999, "quantity": 1}],
+        "address": "Main Road, Talegaon, 410507",
+        "payment_method": "COD"
+    })
+    assert order.status_code == 200
+    order_id = order.json()["order_id"]
+    details = client.get(f"/customers/me/orders/{order_id}", headers=headers)
+    assert details.status_code == 200
+    assert details.json()["order_id"] == order_id
+    assert details.json()["status"] == "CONFIRMED"
+    assert "PACKING" in details.json()["allowed_next_statuses"]
+    missing = client.get("/customers/me/orders/999999", headers=headers)
+    assert missing.status_code == 404
