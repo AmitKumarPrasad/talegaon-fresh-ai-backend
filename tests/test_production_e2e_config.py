@@ -21,6 +21,9 @@ class ProductionE2EConfigTests(unittest.TestCase):
                 "ADMIN_API_TOKEN",
                 "DATABASE_URL",
                 "JWT_SECRET",
+                "TWILIO_ACCOUNT_SID",
+                "TWILIO_AUTH_TOKEN",
+                "TWILIO_FROM_NUMBER",
             )
         }
 
@@ -40,6 +43,9 @@ class ProductionE2EConfigTests(unittest.TestCase):
         os.environ["JWT_SECRET"] = (
             "configured-strong-secret-12345678901234567890"
         )
+        os.environ["TWILIO_ACCOUNT_SID"] = "AC123"
+        os.environ["TWILIO_AUTH_TOKEN"] = "twilio-auth-token"
+        os.environ["TWILIO_FROM_NUMBER"] = "+15551234567"
 
         validate_production_config()
 
@@ -53,6 +59,9 @@ class ProductionE2EConfigTests(unittest.TestCase):
             "configured-strong-secret-12345678901234567890"
         )
         os.environ["OPENAI_API_KEY"] = "optional-openai-key"
+        os.environ["TWILIO_ACCOUNT_SID"] = "AC123"
+        os.environ["TWILIO_AUTH_TOKEN"] = "twilio-auth-token"
+        os.environ["TWILIO_FROM_NUMBER"] = "+15551234567"
 
         validate_production_config()
 
@@ -63,6 +72,9 @@ class ProductionE2EConfigTests(unittest.TestCase):
         os.environ["JWT_SECRET"] = (
             "configured-strong-secret-12345678901234567890"
         )
+        os.environ["TWILIO_ACCOUNT_SID"] = "AC123"
+        os.environ["TWILIO_AUTH_TOKEN"] = "twilio-auth-token"
+        os.environ["TWILIO_FROM_NUMBER"] = "+15551234567"
 
         with self.assertRaisesRegex(RuntimeError, "SQLite"):
             validate_production_config()
@@ -76,6 +88,9 @@ class ProductionE2EConfigTests(unittest.TestCase):
         os.environ["JWT_SECRET"] = (
             "configured-strong-secret-12345678901234567890"
         )
+        os.environ["TWILIO_ACCOUNT_SID"] = "AC123"
+        os.environ["TWILIO_AUTH_TOKEN"] = "twilio-auth-token"
+        os.environ["TWILIO_FROM_NUMBER"] = "+15551234567"
 
         with self.assertRaisesRegex(RuntimeError, "PostgreSQL"):
             validate_production_config()
