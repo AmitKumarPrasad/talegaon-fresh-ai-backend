@@ -101,8 +101,9 @@ Set `ENVIRONMENT=production` and configure:
 - `RAZORPAY_KEY_SECRET`
 - `RAZORPAY_WEBHOOK_SECRET`
 - `ADMIN_API_TOKEN`
+- `JWT_SECRET` — unique random secret, at least 32 characters; keep it stable across deployments
 
-Never commit these values to Git.
+Never commit these values to Git. Configure these values in the Render service Environment settings, not in the repository.
 
 ### E2E sequence
 
