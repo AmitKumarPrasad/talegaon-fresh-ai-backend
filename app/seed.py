@@ -18,7 +18,7 @@ def seed_products() -> None:
             row = db.query(ProductModel).filter_by(name=product.name).first()
             if row is None:
                 db.add(ProductModel(id=product.id, name=product.name, unit=product.unit,
-                                    price=SEED_PRICES[product.name], in_stock=True))
+                                    price=SEED_PRICES[product.name], in_stock=True, stock_quantity=100))
         db.commit()
     finally:
         db.close()

@@ -208,8 +208,24 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
             product = db.query(ProductModel).filter(ProductModel.name.ilike(item.name)).first()
             if not product:
                 raise HTTPException(status_code=400, detail=f"Product not found: {item.name}")
-            if not product.in_stock:
-                raise HTTPException(status_code=409, detail=f"Product out of stock: {product.name}")
+            if not product.in_stock or product.stock_quantity < item.quantity:
+                raise HTTPException(status_code=409, detail=f"Insufficient stock: {product.name}")
+            updated = (
+                db.query(ProductModel)
+                .filter(
+                    ProductModel.id == product.id,
+                    ProductModel.stock_quantity >= item.quantity,
+                    ProductModel.in_stock.is_(True),
+                )
+                .update(
+                    {ProductModel.stock_quantity: ProductModel.stock_quantity - item.quantity},
+                    synchronize_session=False,
+                )
+            )
+            if updated != 1:
+                raise HTTPException(status_code=409, detail=f"Insufficient stock: {product.name}")
+            product = db.get(ProductModel, product.id)
+            product.in_stock = product.stock_quantity > 0
             line_total = round(product.price * item.quantity, 2)
             db.add(OrderItemModel(order_id=order.id, product_name=product.name, quantity=item.quantity, unit_price=product.price, line_total=line_total))
             total += line_total

@@ -22,6 +22,7 @@ class ProductModel(Base):
     unit: Mapped[str] = mapped_column(String(30))
     price: Mapped[float] = mapped_column(Float)
     in_stock: Mapped[bool] = mapped_column(Boolean, default=True)
+    stock_quantity: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class OrderModel(Base):

@@ -28,7 +28,7 @@ def setup_module():
     from app.db import SessionLocal
     db = SessionLocal()
     db.query(ProductModel).delete()
-    db.add(ProductModel(name="Tomato", unit="1 kg", price=40, in_stock=True))
+    db.add(ProductModel(name="Tomato", unit="1 kg", price=40, in_stock=True, stock_quantity=10))
     db.commit()
     db.close()
 
@@ -126,3 +126,75 @@ def test_customer_order_tracking_is_scoped_to_customer():
     assert "PACKING" in details.json()["allowed_next_statuses"]
     missing = client.get("/customers/me/orders/999999", headers=headers)
     assert missing.status_code == 404
+
+def _reset_tomato_stock(quantity=10):
+    from app.db import SessionLocal
+    db = SessionLocal()
+    product = db.query(ProductModel).filter_by(name="Tomato").one()
+    product.stock_quantity = quantity
+    product.in_stock = quantity > 0
+    db.commit()
+    db.close()
+
+
+def test_order_reserves_stock_and_rejects_insufficient_quantity():
+    _reset_tomato_stock()
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    first = client.post("/customers/me/orders", headers=headers, json={
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 6}],
+        "address": "Main Road, Talegaon, 410507", "payment_method": "COD"
+    })
+    assert first.status_code == 200
+    from app.db import SessionLocal
+    db = SessionLocal()
+    product = db.query(ProductModel).filter_by(name="Tomato").one()
+    assert product.stock_quantity == 4
+    assert product.in_stock is True
+    db.close()
+    second = client.post("/customers/me/orders", headers=headers, json={
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 5}],
+        "address": "Main Road, Talegaon, 410507", "payment_method": "COD"
+    })
+    assert second.status_code == 409
+    db = SessionLocal()
+    product = db.query(ProductModel).filter_by(name="Tomato").one()
+    assert product.stock_quantity == 4
+    db.close()
+
+
+def test_order_consumes_exact_remaining_stock_and_marks_product_out_of_stock():
+    _reset_tomato_stock()
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    order = client.post("/customers/me/orders", headers=headers, json={
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 4}],
+        "address": "Main Road, Talegaon, 410507", "payment_method": "COD"
+    })
+    assert order.status_code == 200
+    from app.db import SessionLocal
+    db = SessionLocal()
+    product = db.query(ProductModel).filter_by(name="Tomato").one()
+    assert product.stock_quantity == 0
+    assert product.in_stock is False
+    db.close()
+
+
+def test_failed_order_rolls_back_stock_reservation():
+    _reset_tomato_stock()
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.post("/customers/me/orders", headers=headers, json={
+        "items": [
+            {"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 2},
+            {"name": "Missing Product", "unit": "1 kg", "price": 10, "quantity": 1},
+        ],
+        "address": "Main Road, Talegaon, 410507", "payment_method": "COD"
+    })
+    assert response.status_code == 400
+    from app.db import SessionLocal
+    db = SessionLocal()
+    product = db.query(ProductModel).filter_by(name="Tomato").one()
+    assert product.stock_quantity == 10
+    assert product.in_stock is True
+    db.close()
