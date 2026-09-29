@@ -4,14 +4,13 @@ import hmac
 import json
 import logging
 import os
-import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Header, HTTPException
 
 from app.db import SessionLocal
 from app.models import CustomerModel
-from app.twilio_service import send_otp_sms
+from app.msg91_service import send_otp, verify_otp as verify_msg91_otp
 
 logger = logging.getLogger(__name__)
 
@@ -116,16 +115,18 @@ def request_otp(phone: str, name: str | None = None, reveal_otp: bool = False) -
             db.rollback()
             raise HTTPException(status_code=429, detail=f"OTP request limit reached. Retry in {retry_seconds} seconds.")
 
+        is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
         otp = os.getenv("DEV_OTP", DEV_OTP)
-        if os.getenv("ENVIRONMENT", "development").lower() == "production":
-            otp = f"{secrets.randbelow(1_000_000):06d}"
-        customer.otp_hash = hashlib.sha256(otp.encode()).hexdigest()
         customer.otp_expires_at = now + timedelta(minutes=OTP_TTL_MINUTES)
         customer.otp_request_count += 1
         customer.otp_failed_attempts = 0
         customer.otp_locked_until = None
         try:
-            send_otp_sms(phone, otp)
+            if is_production:
+                send_otp(phone)
+                customer.otp_hash = hashlib.sha256(b"msg91-provider").hexdigest()
+            else:
+                customer.otp_hash = hashlib.sha256(otp.encode()).hexdigest()
         except Exception as exc:
             db.rollback()
             logger.exception("Failed to send OTP SMS to %s", phone)
@@ -133,9 +134,9 @@ def request_otp(phone: str, name: str | None = None, reveal_otp: bool = False) -
 
         db.commit()
         result = {"message": "OTP requested", "expires_in_seconds": OTP_TTL_MINUTES * 60}
-        if os.getenv("ENVIRONMENT", "development").lower() != "production":
+        if not is_production:
             result["demo_otp"] = otp
-        if reveal_otp:
+        if reveal_otp and not is_production:
             result["otp"] = otp
         return result
     finally:
@@ -162,7 +163,17 @@ def verify_otp(phone: str, otp: str, name: str | None = None) -> dict:
         if expires < now:
             raise HTTPException(status_code=401, detail="OTP expired")
 
-        if not hmac.compare_digest(customer.otp_hash, hashlib.sha256(otp.encode()).hexdigest()):
+        is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
+        if is_production:
+            try:
+                valid = verify_msg91_otp(phone.strip(), otp)
+            except Exception as exc:
+                logger.exception("Failed to verify OTP with MSG91 for %s", phone)
+                raise HTTPException(status_code=503, detail="OTP verification is temporarily unavailable") from exc
+        else:
+            valid = hmac.compare_digest(customer.otp_hash, hashlib.sha256(otp.encode()).hexdigest())
+
+        if not valid:
             customer.otp_failed_attempts += 1
             if customer.otp_failed_attempts >= OTP_MAX_FAILED_ATTEMPTS:
                 customer.otp_locked_until = now + timedelta(minutes=OTP_LOCK_MINUTES)
