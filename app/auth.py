@@ -84,7 +84,7 @@ def current_customer(authorization: str | None = Header(default=None)) -> Custom
         db.close()
 
 
-def request_otp(phone: str, name: str | None = None) -> dict:
+def request_otp(phone: str, name: str | None = None, reveal_otp: bool = False) -> dict:
     phone = phone.strip()
     if not phone:
         raise HTTPException(status_code=400, detail="Phone is required")
@@ -138,6 +138,8 @@ def request_otp(phone: str, name: str | None = None) -> dict:
             logger.exception("Failed to send OTP WhatsApp message to %s", phone)
         if os.getenv("ENVIRONMENT", "development").lower() != "production":
             result["demo_otp"] = otp
+        if reveal_otp:
+            result["otp"] = otp
         return result
     finally:
         db.close()
