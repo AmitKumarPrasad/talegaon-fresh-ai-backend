@@ -25,8 +25,9 @@ OPTIONAL_PRODUCTION_VARS = (
     "RAZORPAY_KEY_ID",
     "RAZORPAY_KEY_SECRET",
     "RAZORPAY_WEBHOOK_SECRET",
-    "SMS_GATEWAY_USERNAME",
-    "SMS_GATEWAY_PASSWORD",
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "TWILIO_FROM_NUMBER",
 )
 
 
@@ -41,7 +42,7 @@ def validate_production_config() -> None:
     if os.getenv("ENVIRONMENT", "development").lower() != "production":
         return
 
-    missing = [name for name in REQUIRED_PRODUCTION_VARS if not os.getenv(name)]
+    required = REQUIRED_PRODUCTION_VARS + ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER")\n    missing = [name for name in required if not os.getenv(name)]
     if missing:
         raise RuntimeError(
             "Missing required production environment variables: " + ", ".join(missing)
