@@ -1,6 +1,8 @@
 import os
 import requests
 
+from app.phone_utils import to_e164_digits
+
 GRAPH_API_VERSION = os.getenv("WHATSAPP_GRAPH_API_VERSION", "v23.0")
 
 
@@ -13,7 +15,7 @@ def send_text_message(to: str, text: str) -> dict:
     url = f"https://graph.facebook.com/{GRAPH_API_VERSION}/{phone_number_id}/messages"
     payload = {
         "messaging_product": "whatsapp",
-        "to": to,
+        "to": to_e164_digits(to),
         "type": "text",
         "text": {"body": text},
     }
@@ -23,5 +25,8 @@ def send_text_message(to: str, text: str) -> dict:
         json=payload,
         timeout=15,
     )
-    response.raise_for_status()
+    if not response.ok:
+        raise requests.exceptions.HTTPError(
+            f"{response.status_code} error sending WhatsApp message: {response.text}", response=response
+        )
     return response.json()
