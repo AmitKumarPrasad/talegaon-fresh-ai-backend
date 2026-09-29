@@ -50,6 +50,16 @@ class OrderRequest(BaseModel):
     payment_method: str | None = Field(default=None, max_length=20)
 
 
+class AiChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+
+def _mobile_ai_reply(message: str) -> str:
+    from app.openai_service import generate_mobile_reply
+
+    return generate_mobile_reply(message)
+
+
 def _address_dict(item: AddressModel) -> dict:
     return {"id": item.id, "label": item.label, "address": item.address, "city": item.city, "pincode": item.pincode, "is_default": item.is_default}
 
@@ -188,6 +198,18 @@ def clear_cart(customer: CustomerModel = Depends(current_customer)):
         return {"status": "cleared"}
     finally:
         db.close()
+
+
+@router.post("/customers/me/ai/chat")
+def mobile_ai_chat(
+    payload: AiChatRequest,
+    customer: CustomerModel = Depends(current_customer),
+):
+    try:
+        reply = _mobile_ai_reply(payload.message)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"reply": reply}
 
 
 @router.post("/customers/me/orders")
