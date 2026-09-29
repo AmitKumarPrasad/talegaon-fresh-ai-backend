@@ -5,8 +5,6 @@ from unittest.mock import MagicMock, patch
 from starlette.requests import Request
 
 from app.admin_orders import get_admin_order, list_orders
-from app.price_service import list_inventory, update_inventory
-
 from app.main import (
     admin_inventory,
     admin_order,
@@ -80,6 +78,14 @@ class AdminInventoryEndpointTests(unittest.IsolatedAsyncioTestCase):
         list_inventory_mock.return_value = [{"id": 1, "stock_quantity": 12, "in_stock": True}]
         response = await admin_inventory(make_request("secret"))
         self.assertEqual(response["products"][0]["stock_quantity"], 12)
+
+    @patch("app.main.update_inventory")
+    async def test_admin_inventory_rejects_negative_stock(self, update_inventory_mock):
+        os.environ["ADMIN_API_TOKEN"] = "secret"
+        update_inventory_mock.side_effect = ValueError("Stock quantity cannot be negative.")
+        payload = type("Payload", (), {"stock_quantity": -1})()
+        response = await admin_update_inventory(1, payload, make_request("secret"))
+        self.assertEqual(response.status_code, 400)
 
     @patch("app.main.update_inventory")
     async def test_admin_inventory_updates_stock(self, update_inventory_mock):
