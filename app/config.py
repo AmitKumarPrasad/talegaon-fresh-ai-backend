@@ -14,6 +14,7 @@ REQUIRED_PRODUCTION_VARS = (
     "RAZORPAY_WEBHOOK_SECRET",
     "ADMIN_API_TOKEN",
     "DATABASE_URL",
+    "JWT_SECRET",
 )
 
 def validate_production_config() -> None:
