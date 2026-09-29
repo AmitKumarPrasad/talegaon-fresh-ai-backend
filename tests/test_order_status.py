@@ -23,6 +23,7 @@ class OrderStatusLifecycleTests(unittest.TestCase):
         query.filter.return_value = query
         query.all.return_value = [item]
         query.first.return_value = product
+        query.update.return_value = 1
         self.assertTrue(transition_order(101, "CANCELLED"))
         self.assertEqual(order.status, "CANCELLED")
         self.assertFalse(order.stock_reserved)
