@@ -15,7 +15,8 @@ depends_on = None
 def upgrade() -> None:
     op.add_column("orders", sa.Column("created_at", sa.DateTime(timezone=True), nullable=True))
     op.execute(sa.text("UPDATE orders SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
-    op.alter_column("orders", "created_at", nullable=False)
+    with op.batch_alter_table("orders") as batch_op:
+        batch_op.alter_column("created_at", existing_type=sa.DateTime(timezone=True), nullable=False)
 
 
 def downgrade() -> None:
