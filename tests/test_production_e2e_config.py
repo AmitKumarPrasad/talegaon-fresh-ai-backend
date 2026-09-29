@@ -21,9 +21,8 @@ class ProductionE2EConfigTests(unittest.TestCase):
                 "ADMIN_API_TOKEN",
                 "DATABASE_URL",
                 "JWT_SECRET",
-                "TWILIO_ACCOUNT_SID",
-                "TWILIO_AUTH_TOKEN",
-                "TWILIO_FROM_NUMBER",
+                "MSG91_AUTHKEY",
+                "MSG91_TEMPLATE_ID",
             )
         }
 
@@ -43,9 +42,8 @@ class ProductionE2EConfigTests(unittest.TestCase):
         os.environ["JWT_SECRET"] = (
             "configured-strong-secret-12345678901234567890"
         )
-        os.environ["TWILIO_ACCOUNT_SID"] = "AC123"
-        os.environ["TWILIO_AUTH_TOKEN"] = "twilio-auth-token"
-        os.environ["TWILIO_FROM_NUMBER"] = "+15551234567"
+        os.environ["MSG91_AUTHKEY"] = "msg91-auth-key"
+        os.environ["MSG91_TEMPLATE_ID"] = "template-123"
 
         validate_production_config()
 
