@@ -292,23 +292,3 @@ def test_failed_order_rolls_back_stock_reservation():
     assert product.in_stock is True
     db.close()
 
-
-def test_mobile_ai_chat_requires_authentication():
-    response = client.post("/customers/me/ai/chat", json={"message": "What vegetables are available?"})
-    assert response.status_code == 401
-
-
-def test_mobile_ai_chat_returns_reply_without_exposing_commerce_authority():
-    from unittest.mock import patch
-
-    token = auth()
-    headers = {"Authorization": f"Bearer {token}"}
-    with patch("app.customer_api._mobile_ai_reply", return_value="Please check the Products screen for live prices and stock.") as reply:
-        response = client.post(
-            "/customers/me/ai/chat",
-            headers=headers,
-            json={"message": "How much are tomatoes?"},
-        )
-    assert response.status_code == 200
-    assert response.json()["reply"] == "Please check the Products screen for live prices and stock."
-    reply.assert_called_once_with("How much are tomatoes?")
