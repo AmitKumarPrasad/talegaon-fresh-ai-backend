@@ -1,13 +1,12 @@
 # Talegaon Fresh AI Backend
 
-WhatsApp AI ordering backend for Talegaon Fresh.
+Mobile-first backend for Talegaon Fresh, with optional AI assistance. WhatsApp and Razorpay integrations remain available in the codebase for later activation but are not required for the current mobile production deployment.
 
 ## Stack
 - Python
 - FastAPI
-- OpenAI API
-- WhatsApp Cloud API
 - PostgreSQL
+- OpenAI API (optional AI assistant)
 
 ## Local setup
 
@@ -62,7 +61,37 @@ Build the image with Docker and provide production environment variables at runt
 
 Health endpoint: GET /health
 
-Set ENVIRONMENT=production in production. The application then requires its production configuration, including a PostgreSQL DATABASE_URL, and rejects SQLite and non-PostgreSQL production database URLs.
+Set `ENVIRONMENT=production` in production.
+
+### Required production environment
+
+These variables are required for the mobile production service:
+
+- `DATABASE_URL` using PostgreSQL
+- `ADMIN_API_TOKEN`
+- `JWT_SECRET` — unique random secret, at least 32 characters; keep it stable across deployments
+
+The service rejects SQLite and non-PostgreSQL production database URLs.
+
+### Optional AI environment
+
+`OPENAI_API_KEY` is optional. When configured, the backend can use the existing AI assistant functionality. When it is not configured, the mobile commerce APIs can still start and operate normally; AI-dependent responses return a safe configuration message instead of preventing application startup.
+
+Keep `OPENAI_MODEL` configurable as needed.
+
+### Deferred external integrations
+
+The following are not required for the current mobile-only production deployment:
+
+- `WHATSAPP_VERIFY_TOKEN`
+- `WHATSAPP_ACCESS_TOKEN`
+- `WHATSAPP_PHONE_NUMBER_ID`
+- `SELLER_WHATSAPP_NUMBER`
+- `RAZORPAY_KEY_ID`
+- `RAZORPAY_KEY_SECRET`
+- `RAZORPAY_WEBHOOK_SECRET`
+
+Do not add these variables to Render unless/ until the corresponding integrations are activated.
 
 For a multi-instance deployment, run Alembic as a separate release or migration job rather than concurrently from every application instance.
 
@@ -74,50 +103,12 @@ Use the same `X-Admin-Token` header for protected order operations.
 - `GET /admin/orders/{order_id}` — view order details, items, payment, address, and allowed next statuses
 - `PATCH /admin/orders/{order_id}/status` — advance an order through the validated lifecycle
 
-Customer UPI payment links are created through `POST /customers/me/orders/{order_id}/payment-link` after an authenticated UPI order reaches `PAYMENT_PENDING`. Existing links are reused, and Razorpay credentials remain server-side.
+## Mobile production scope
 
-Example status update:
-```json
-{"status":"PACKING"}
-```
+The current production path is:
 
-Order status changes use the centralized lifecycle rules, so invalid jumps such as `PENDING -> DELIVERED` are rejected.
+`Flutter mobile app -> FastAPI -> PostgreSQL`
 
-## Production WhatsApp and Razorpay E2E checklist
+The core flow includes authentication, addresses, cart, product catalog, order creation, order history/details, server-authoritative pricing, inventory, and admin order operations.
 
-Before switching to live payment processing, validate the production integration in Razorpay test mode.
-
-### Required production environment
-
-Set `ENVIRONMENT=production` and configure:
-
-- `OPENAI_API_KEY`
-- `DATABASE_URL` using PostgreSQL
-- `WHATSAPP_VERIFY_TOKEN`
-- `WHATSAPP_ACCESS_TOKEN`
-- `WHATSAPP_PHONE_NUMBER_ID`
-- `SELLER_WHATSAPP_NUMBER`
-- `RAZORPAY_KEY_ID`
-- `RAZORPAY_KEY_SECRET`
-- `RAZORPAY_WEBHOOK_SECRET`
-- `ADMIN_API_TOKEN`
-- `JWT_SECRET` — unique random secret, at least 32 characters; keep it stable across deployments
-
-Never commit these values to Git. Configure these values in the Render service Environment settings, not in the repository.
-
-### E2E sequence
-
-1. Verify `GET /health`.
-2. Verify the Meta WhatsApp webhook challenge against `WHATSAPP_VERIFY_TOKEN`.
-3. Send a test WhatsApp message and confirm the backend receives the webhook.
-4. Place a test order and confirm the order is persisted with the current database prices.
-5. Provide an address and select COD; verify `CONFIRMED` status and seller notification.
-6. Start another test order and select UPI.
-7. Confirm a Razorpay payment link is generated for the exact order total.
-8. Configure Razorpay's webhook endpoint as `POST /razorpay/webhook` and use the configured webhook secret.
-9. Complete a Razorpay test payment and verify the webhook changes the order to `CONFIRMED`.
-10. Verify duplicate WhatsApp/Razorpay webhook deliveries do not create duplicate processing or notifications.
-11. Exercise admin order status changes through `PACKING -> OUT_FOR_DELIVERY -> DELIVERED`.
-12. Only after all test-mode checks pass, replace test credentials with live credentials and repeat a controlled low-value live transaction.
-
-The application cannot perform these external-provider checks from CI because they require real Meta/Razorpay credentials and provider-side configuration.
+AI is an optional layer on top of the core commerce flow; it must not determine prices, stock, payment results, or authoritative order totals.
