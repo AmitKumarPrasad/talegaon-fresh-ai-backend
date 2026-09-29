@@ -127,7 +127,18 @@ def test_customer_order_tracking_is_scoped_to_customer():
     missing = client.get("/customers/me/orders/999999", headers=headers)
     assert missing.status_code == 404
 
+def _reset_tomato_stock(quantity=10):
+    from app.db import SessionLocal
+    db = SessionLocal()
+    product = db.query(ProductModel).filter_by(name="Tomato").one()
+    product.stock_quantity = quantity
+    product.in_stock = quantity > 0
+    db.commit()
+    db.close()
+
+
 def test_order_reserves_stock_and_rejects_insufficient_quantity():
+    _reset_tomato_stock()
     token = auth()
     headers = {"Authorization": f"Bearer {token}"}
     first = client.post("/customers/me/orders", headers=headers, json={
@@ -153,6 +164,7 @@ def test_order_reserves_stock_and_rejects_insufficient_quantity():
 
 
 def test_order_consumes_exact_remaining_stock_and_marks_product_out_of_stock():
+    _reset_tomato_stock()
     token = auth()
     headers = {"Authorization": f"Bearer {token}"}
     order = client.post("/customers/me/orders", headers=headers, json={
@@ -169,6 +181,7 @@ def test_order_consumes_exact_remaining_stock_and_marks_product_out_of_stock():
 
 
 def test_failed_order_rolls_back_stock_reservation():
+    _reset_tomato_stock()
     token = auth()
     headers = {"Authorization": f"Bearer {token}"}
     response = client.post("/customers/me/orders", headers=headers, json={
