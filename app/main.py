@@ -26,6 +26,8 @@ from app.order_flow import process_order_message
 from app.seed import seed_products
 from app.price_service import (
     bulk_update_product_prices,
+    list_inventory,
+    update_inventory,
     list_current_prices,
     price_history,
     update_product_price,
@@ -74,6 +76,10 @@ async def verify_webhook(request: Request):
 
 
 
+class InventoryUpdateRequest(BaseModel):
+    stock_quantity: int = Field(ge=0)
+
+
 class PriceUpdateRequest(BaseModel):
     price: float = Field(gt=0)
     in_stock: bool | None = None
@@ -114,6 +120,30 @@ async def admin_update_inventory(
     if not _admin_authorized(request):
         return PlainTextResponse("Unauthorized", status_code=401)
     product = update_inventory(product_id, payload.stock_quantity)
+    if not product:
+        return PlainTextResponse("Product not found", status_code=404)
+    return product
+
+
+@app.get("/admin/inventory")
+async def admin_inventory(request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    return {"products": list_inventory()}
+
+
+@app.put("/admin/inventory/{product_id}")
+async def admin_update_inventory(
+    product_id: int,
+    payload: InventoryUpdateRequest,
+    request: Request,
+):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    try:
+        product = update_inventory(product_id, payload.stock_quantity)
+    except ValueError as exc:
+        return PlainTextResponse(str(exc), status_code=400)
     if not product:
         return PlainTextResponse("Product not found", status_code=404)
     return product
