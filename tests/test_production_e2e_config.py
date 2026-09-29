@@ -18,6 +18,7 @@ class ProductionE2EConfigTests(unittest.TestCase):
             "RAZORPAY_WEBHOOK_SECRET",
             "ADMIN_API_TOKEN",
             "DATABASE_URL",
+            "JWT_SECRET",
         )}
 
     def tearDown(self):
@@ -40,8 +41,9 @@ class ProductionE2EConfigTests(unittest.TestCase):
             "RAZORPAY_KEY_SECRET",
             "RAZORPAY_WEBHOOK_SECRET",
             "ADMIN_API_TOKEN",
+            "JWT_SECRET",
         ):
-            os.environ[key] = "configured"
+            os.environ[key] = "configured-strong-secret-12345678901234567890"
 
         validate_production_config()
 
@@ -58,6 +60,7 @@ class ProductionE2EConfigTests(unittest.TestCase):
             "RAZORPAY_KEY_SECRET",
             "RAZORPAY_WEBHOOK_SECRET",
             "ADMIN_API_TOKEN",
+            "JWT_SECRET",
         ):
             os.environ[key] = "configured"
 
@@ -77,6 +80,7 @@ class ProductionE2EConfigTests(unittest.TestCase):
             "RAZORPAY_KEY_SECRET",
             "RAZORPAY_WEBHOOK_SECRET",
             "ADMIN_API_TOKEN",
+            "JWT_SECRET",
         ):
             os.environ[key] = "configured"
 

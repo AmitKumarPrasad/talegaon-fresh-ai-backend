@@ -14,6 +14,7 @@ REQUIRED_PRODUCTION_VARS = (
     "RAZORPAY_WEBHOOK_SECRET",
     "ADMIN_API_TOKEN",
     "DATABASE_URL",
+    "JWT_SECRET",
 )
 
 def validate_production_config() -> None:
@@ -28,3 +29,7 @@ def validate_production_config() -> None:
         raise RuntimeError("SQLite is not supported for production. Configure PostgreSQL.")
     if not database_url.startswith(("postgresql://", "postgres://", "postgresql+psycopg2://")):
         raise RuntimeError("Production DATABASE_URL must use PostgreSQL.")
+
+    jwt_secret = os.getenv("JWT_SECRET", "")
+    if len(jwt_secret) < 32 or jwt_secret == "development-jwt-secret-change-me":
+        raise RuntimeError("Production JWT_SECRET must be a unique secret of at least 32 characters.")

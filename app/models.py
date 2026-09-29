@@ -78,6 +78,10 @@ class CustomerModel(Base):
     name: Mapped[str] = mapped_column(String(100), default="Customer")
     otp_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     otp_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    otp_window_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    otp_request_count: Mapped[int] = mapped_column(Integer, default=0)
+    otp_failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    otp_locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cart: Mapped[list] = mapped_column(JSON, default=list)
 
 
