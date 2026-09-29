@@ -42,7 +42,8 @@ def validate_production_config() -> None:
     if os.getenv("ENVIRONMENT", "development").lower() != "production":
         return
 
-    required = REQUIRED_PRODUCTION_VARS + ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER")\n    missing = [name for name in required if not os.getenv(name)]
+    required = REQUIRED_PRODUCTION_VARS + ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER")
+    missing = [name for name in required if not os.getenv(name)]
     if missing:
         raise RuntimeError(
             "Missing required production environment variables: " + ", ".join(missing)
