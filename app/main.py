@@ -113,7 +113,10 @@ async def admin_update_inventory(
 ):
     if not _admin_authorized(request):
         return PlainTextResponse("Unauthorized", status_code=401)
-    product = update_inventory(product_id, payload.stock_quantity)
+    try:
+        product = update_inventory(product_id, payload.stock_quantity)
+    except ValueError as exc:
+        return PlainTextResponse(str(exc), status_code=400)
     if not product:
         return PlainTextResponse("Product not found", status_code=404)
     return product
