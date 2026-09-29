@@ -11,8 +11,7 @@ from fastapi import Header, HTTPException
 
 from app.db import SessionLocal
 from app.models import CustomerModel
-from app.sms_service import send_sms
-from app.whatsapp import send_text_message
+from app.twilio_service import send_otp_sms
 
 logger = logging.getLogger(__name__)
 
@@ -125,17 +124,15 @@ def request_otp(phone: str, name: str | None = None, reveal_otp: bool = False) -
         customer.otp_request_count += 1
         customer.otp_failed_attempts = 0
         customer.otp_locked_until = None
+        try:
+            send_otp_sms(phone, otp)
+        except Exception as exc:
+            db.rollback()
+            logger.exception("Failed to send OTP SMS to %s", phone)
+            raise HTTPException(status_code=503, detail="OTP delivery is temporarily unavailable") from exc
+
         db.commit()
         result = {"message": "OTP requested", "expires_in_seconds": OTP_TTL_MINUTES * 60}
-        otp_message = f"Your Talegaon Fresh OTP is {otp}. It expires in {OTP_TTL_MINUTES} minutes."
-        try:
-            send_sms(phone, otp_message)
-        except Exception:
-            logger.exception("Failed to send OTP SMS to %s", phone)
-        try:
-            send_text_message(phone, otp_message)
-        except Exception:
-            logger.exception("Failed to send OTP WhatsApp message to %s", phone)
         if os.getenv("ENVIRONMENT", "development").lower() != "production":
             result["demo_otp"] = otp
         if reveal_otp:
