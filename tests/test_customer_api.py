@@ -112,6 +112,9 @@ def test_cart_and_orders():
     assert order.status_code == 200
     assert order.json()["total"] == 80
     assert order.json()["status"] == "CONFIRMED"
+    assert isinstance(order.json()["created_at"], str)
+    created_at = datetime.fromisoformat(order.json()["created_at"])
+    assert created_at.tzinfo is not None
 
     orders = client.get("/customers/me/orders", headers=headers)
     assert orders.status_code == 200
