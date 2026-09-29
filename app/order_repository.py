@@ -40,6 +40,7 @@ def create_order(customer_id: str, cart: dict, status: str = "PENDING") -> int:
                 unit_price=product.price,
                 line_total=item["line_total"],
             ))
+        order.stock_reserved = True
         db.commit()
         db.refresh(order)
         return order.id
