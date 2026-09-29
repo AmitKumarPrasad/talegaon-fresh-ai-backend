@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field
 from app.auth import current_customer, logout_customer, request_otp, verify_otp
 from app.db import SessionLocal
 from app.models import AddressModel, CustomerModel, OrderItemModel, OrderModel, ProductModel
-from app.order_details import get_customer_order
+from app.order_details import get_customer_order, save_payment_link
+from app.payment_service import PaymentError, create_payment_link
 from app.order_status import get_allowed_transitions
 
 router = APIRouter()
@@ -243,6 +244,39 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
     finally:
         db.close()
 
+
+
+@router.post("/customers/me/orders/{order_id}/payment-link")
+def create_customer_payment_link(
+    order_id: int,
+    customer: CustomerModel = Depends(current_customer),
+):
+    order = get_customer_order(order_id, customer.phone)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order["payment_method"] != "UPI":
+        raise HTTPException(status_code=400, detail="Order payment method must be UPI")
+    if order["status"] != "PAYMENT_PENDING":
+        raise HTTPException(status_code=409, detail="Order is not awaiting UPI payment")
+    if order.get("payment_link_url") and order.get("razorpay_payment_link_id"):
+        return {
+            "order_id": order_id,
+            "status": order["status"],
+            "payment_link_url": order["payment_link_url"],
+            "razorpay_payment_link_id": order["razorpay_payment_link_id"],
+        }
+    try:
+        link = create_payment_link(order_id, order["total"], customer.phone)
+        if not save_payment_link(order_id, link["id"], link["short_url"]):
+            raise PaymentError("Order could not be updated with the payment link")
+    except PaymentError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {
+        "order_id": order_id,
+        "status": "PAYMENT_PENDING",
+        "payment_link_url": link["short_url"],
+        "razorpay_payment_link_id": link["id"],
+    }
 
 @router.get("/customers/me/orders/{order_id}")
 def get_customer_order_details(order_id: int, customer: CustomerModel = Depends(current_customer)):
