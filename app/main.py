@@ -6,7 +6,7 @@ import re
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.admin_orders import get_admin_order, list_orders
@@ -14,6 +14,13 @@ from app.admin_dashboard import get_dashboard_summary
 from app.customer_api import router as customer_router
 from app.catalog import product_menu
 from app.config import get_cors_allowed_origins, validate_production_config
+from app.delivery_service import (
+    add_message_by_delivery,
+    assign_delivery_person,
+    get_delivery_order_summary,
+    list_messages_for_delivery,
+    update_delivery_location,
+)
 from app.menu import MENU
 from app.openai_service import generate_reply
 from app.order_details import (
@@ -256,6 +263,31 @@ async def admin_order(order_id: int, request: Request):
     return order
 
 
+class AssignDeliveryRequest(BaseModel):
+    delivery_person_name: str = Field(min_length=1, max_length=100)
+    delivery_person_phone: str = Field(min_length=7, max_length=30)
+
+
+@app.patch("/admin/orders/{order_id}/delivery")
+async def admin_assign_delivery(order_id: int, payload: AssignDeliveryRequest, request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    result = assign_delivery_person(order_id, payload.delivery_person_name, payload.delivery_person_phone)
+    if not result:
+        return PlainTextResponse("Order not found", status_code=404)
+    base_url = os.getenv("PUBLIC_BASE_URL", "https://talegaon-fresh-ai-backend.onrender.com")
+    delivery_link = f"{base_url}/delivery/{result['delivery_token']}"
+    try:
+        send_text_message(
+            payload.delivery_person_phone,
+            f"Hi {payload.delivery_person_name}, you're assigned to deliver Talegaon Fresh Order #{order_id}. "
+            f"Open this link to share your live location and chat with the customer: {delivery_link}",
+        )
+    except Exception:
+        logger.exception("Failed to notify delivery person for order_id=%s", order_id)
+    return {**result, "delivery_link": delivery_link}
+
+
 @app.patch("/admin/orders/{order_id}/status")
 async def admin_update_order_status(
     order_id: int,
@@ -283,6 +315,164 @@ async def admin_price_history(product_id: int, request: Request, limit: int = 30
     if not _admin_authorized(request):
         return PlainTextResponse("Unauthorized", status_code=401)
     return {"product_id": product_id, "history": price_history(product_id, limit)}
+
+
+class DeliveryLocationRequest(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+
+
+class DeliveryMessageRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=1000)
+
+
+@app.get("/delivery/{token}/summary")
+async def delivery_order_summary(token: str):
+    summary = get_delivery_order_summary(token)
+    if not summary:
+        return PlainTextResponse("Invalid or expired delivery link", status_code=404)
+    return summary
+
+
+@app.post("/delivery/{token}/location")
+async def delivery_update_location(token: str, payload: DeliveryLocationRequest):
+    try:
+        updated = update_delivery_location(token, payload.lat, payload.lng)
+    except ValueError as exc:
+        return PlainTextResponse(str(exc), status_code=400)
+    if not updated:
+        return PlainTextResponse("Invalid or expired delivery link", status_code=404)
+    return {"status": "updated"}
+
+
+@app.get("/delivery/{token}/messages")
+async def delivery_list_messages(token: str):
+    messages = list_messages_for_delivery(token)
+    if messages is None:
+        return PlainTextResponse("Invalid or expired delivery link", status_code=404)
+    return {"messages": messages}
+
+
+@app.post("/delivery/{token}/messages")
+async def delivery_send_message(token: str, payload: DeliveryMessageRequest):
+    message = add_message_by_delivery(token, payload.message)
+    if message is None:
+        return PlainTextResponse("Invalid or expired delivery link", status_code=404)
+    return message
+
+
+@app.get("/delivery/{token}", response_class=HTMLResponse)
+async def delivery_page(token: str):
+    summary = get_delivery_order_summary(token)
+    if not summary:
+        return HTMLResponse("<h2>Invalid or expired delivery link.</h2>", status_code=404)
+    return HTMLResponse(_DELIVERY_PAGE_HTML.replace("__TOKEN__", token))
+
+
+_DELIVERY_PAGE_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Talegaon Fresh — Delivery</title>
+<style>
+  body { font-family: -apple-system, Roboto, Arial, sans-serif; margin: 0; background: #F7FAF5; color: #1a1a1a; }
+  .header { background: #168447; color: white; padding: 18px 20px; font-weight: 800; font-size: 18px; }
+  .card { background: white; margin: 14px; padding: 16px; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+  button { background: #168447; color: white; border: none; padding: 12px 18px; border-radius: 10px; font-weight: 700; font-size: 15px; }
+  button:disabled { background: #99c7ac; }
+  #status { margin-top: 10px; font-size: 13px; color: #555; }
+  .chat { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .bubble { padding: 8px 12px; border-radius: 12px; max-width: 80%; font-size: 14px; }
+  .customer { background: #EAF6EA; align-self: flex-start; }
+  .delivery { background: #168447; color: white; align-self: flex-end; }
+  input[type=text] { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  ul { padding-left: 18px; margin: 6px 0; }
+</style>
+</head>
+<body>
+  <div class="header">Talegaon Fresh — Delivery</div>
+  <div class="card" id="order-card">Loading order...</div>
+  <div class="card">
+    <b>Live Location</b>
+    <div id="status">Not sharing yet.</div>
+    <div style="margin-top:10px;"><button id="share-btn">Share My Location</button></div>
+  </div>
+  <div class="card">
+    <b>Chat with Customer</b>
+    <div class="chat" id="chat"></div>
+    <div class="row">
+      <input type="text" id="msg-input" placeholder="Type a message...">
+      <button id="send-btn">Send</button>
+    </div>
+  </div>
+<script>
+const token = "__TOKEN__";
+const base = window.location.origin;
+let watchId = null;
+
+async function loadOrder() {
+  const res = await fetch(`${base}/delivery/${token}/summary`);
+  if (!res.ok) { document.getElementById('order-card').innerText = 'Invalid or expired link.'; return; }
+  const data = await res.json();
+  let itemsHtml = data.items.map(i => `<li>${i.quantity} x ${i.name}</li>`).join('');
+  document.getElementById('order-card').innerHTML =
+    `<b>Order #${data.order_id}</b> — ${data.status}<br>` +
+    `Address: ${data.address || 'N/A'}<br>Total: Rs.${data.total}<br>Payment: ${data.payment_method || 'N/A'}` +
+    `<ul>${itemsHtml}</ul>`;
+}
+
+function startSharing() {
+  if (!navigator.geolocation) { document.getElementById('status').innerText = 'Geolocation not supported.'; return; }
+  document.getElementById('share-btn').disabled = true;
+  watchId = navigator.geolocation.watchPosition(async (pos) => {
+    const { latitude, longitude } = pos.coords;
+    document.getElementById('status').innerText = `Sharing... last update ${new Date().toLocaleTimeString()}`;
+    await fetch(`${base}/delivery/${token}/location`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat: latitude, lng: longitude }),
+    });
+  }, (err) => {
+    document.getElementById('status').innerText = 'Location error: ' + err.message;
+  }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 });
+}
+
+async function loadMessages() {
+  const res = await fetch(`${base}/delivery/${token}/messages`);
+  if (!res.ok) return;
+  const data = await res.json();
+  const chat = document.getElementById('chat');
+  chat.innerHTML = data.messages.map(m =>
+    `<div class="bubble ${m.sender === 'delivery' ? 'delivery' : 'customer'}">${m.message}</div>`
+  ).join('');
+  chat.scrollTop = chat.scrollHeight;
+}
+
+async function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  await fetch(`${base}/delivery/${token}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: text }),
+  });
+  loadMessages();
+}
+
+document.getElementById('share-btn').addEventListener('click', startSharing);
+document.getElementById('send-btn').addEventListener('click', sendMessage);
+document.getElementById('msg-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+loadOrder();
+loadMessages();
+setInterval(loadMessages, 6000);
+</script>
+</body>
+</html>"""
 
 
 def extract_message(body: dict) -> tuple[str | None, str | None, str | None]:

@@ -10,8 +10,13 @@ from app.models import AddressModel, CustomerModel, OrderItemModel, OrderModel, 
 from app.order_details import get_customer_order, save_payment_link
 from app.payment_service import PaymentError, create_payment_link
 from app.order_status import get_allowed_transitions
+from app.delivery_service import add_message_by_customer, get_tracking_info, list_messages_for_customer
 
 router = APIRouter()
+
+
+class OrderMessageRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=1000)
 
 
 class OtpRequest(BaseModel):
@@ -331,3 +336,28 @@ def list_customer_orders(customer: CustomerModel = Depends(current_customer)):
         return {"orders": [_order_dict(db, order) for order in orders]}
     finally:
         db.close()
+
+
+@router.get("/customers/me/orders/{order_id}/tracking")
+def get_order_tracking(order_id: int, customer: CustomerModel = Depends(current_customer)):
+    tracking = get_tracking_info(order_id, customer.phone)
+    if not tracking:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return tracking
+
+
+@router.get("/customers/me/orders/{order_id}/messages")
+def list_order_messages(order_id: int, customer: CustomerModel = Depends(current_customer)):
+    messages = list_messages_for_customer(order_id, customer.phone)
+    if messages is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return {"messages": messages}
+
+
+@router.post("/customers/me/orders/{order_id}/messages")
+def send_order_message(order_id: int, payload: OrderMessageRequest, customer: CustomerModel = Depends(current_customer)):
+    message = add_message_by_customer(order_id, customer.phone, payload.message)
+    if message is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return message
+
