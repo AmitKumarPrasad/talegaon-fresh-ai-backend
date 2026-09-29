@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -10,6 +11,9 @@ from fastapi import Header, HTTPException
 
 from app.db import SessionLocal
 from app.models import CustomerModel
+from app.sms_service import send_sms
+
+logger = logging.getLogger(__name__)
 
 OTP_TTL_MINUTES = 5
 DEV_OTP = "123456"
@@ -122,6 +126,10 @@ def request_otp(phone: str, name: str | None = None) -> dict:
         customer.otp_locked_until = None
         db.commit()
         result = {"message": "OTP requested", "expires_in_seconds": OTP_TTL_MINUTES * 60}
+        try:
+            send_sms(phone, f"Your Talegaon Fresh OTP is {otp}. It expires in {OTP_TTL_MINUTES} minutes.")
+        except Exception:
+            logger.exception("Failed to send OTP SMS to %s", phone)
         if os.getenv("ENVIRONMENT", "development").lower() != "production":
             result["demo_otp"] = otp
         return result
