@@ -30,6 +30,7 @@ from app.price_service import (
     price_history,
     update_product_price,
 )
+from app.inventory_service import list_inventory, update_inventory
 from app.payment_service import PaymentError, create_payment_link, extract_paid_event, verify_webhook_signature
 from app.seller_notification import notify_seller
 from app.state import get_state, reset_state
@@ -78,6 +79,10 @@ class PriceUpdateRequest(BaseModel):
     in_stock: bool | None = None
 
 
+class InventoryUpdateRequest(BaseModel):
+    stock_quantity: int = Field(ge=0)
+
+
 class BulkPriceUpdateItem(BaseModel):
     product_id: int = Field(gt=0)
     price: float = Field(gt=0)
@@ -91,6 +96,27 @@ class BulkPriceUpdateRequest(BaseModel):
 def _admin_authorized(request: Request) -> bool:
     configured = os.getenv("ADMIN_API_TOKEN")
     return bool(configured) and request.headers.get("X-Admin-Token") == configured
+
+
+@app.get("/admin/inventory")
+async def admin_inventory(request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    return {"products": list_inventory()}
+
+
+@app.put("/admin/inventory/{product_id}")
+async def admin_update_inventory(
+    product_id: int,
+    payload: InventoryUpdateRequest,
+    request: Request,
+):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    product = update_inventory(product_id, payload.stock_quantity)
+    if not product:
+        return PlainTextResponse("Product not found", status_code=404)
+    return product
 
 
 @app.get("/admin/prices")
