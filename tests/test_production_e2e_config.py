@@ -60,6 +60,7 @@ class ProductionE2EConfigTests(unittest.TestCase):
             "RAZORPAY_KEY_SECRET",
             "RAZORPAY_WEBHOOK_SECRET",
             "ADMIN_API_TOKEN",
+            "JWT_SECRET",
         ):
             os.environ[key] = "configured"
 
@@ -79,6 +80,7 @@ class ProductionE2EConfigTests(unittest.TestCase):
             "RAZORPAY_KEY_SECRET",
             "RAZORPAY_WEBHOOK_SECRET",
             "ADMIN_API_TOKEN",
+            "JWT_SECRET",
         ):
             os.environ[key] = "configured"
 
