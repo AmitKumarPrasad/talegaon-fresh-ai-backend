@@ -39,6 +39,7 @@ class OrderModel(Base):
     razorpay_event_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
     payment_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     stock_reserved: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
 
 class OrderItemModel(Base):
