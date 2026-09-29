@@ -74,3 +74,25 @@ def test_cart_and_orders():
 def test_unauthorized_customer_api():
     response = client.get("/customers/me/cart")
     assert response.status_code == 401
+
+
+def test_otp_request_rate_limit():
+    phone = "919999999998"
+    for _ in range(3):
+        response = client.post("/auth/request-otp", json={"phone": phone})
+        assert response.status_code == 200
+    limited = client.post("/auth/request-otp", json={"phone": phone})
+    assert limited.status_code == 429
+
+
+def test_otp_invalid_attempt_lockout():
+    phone = "919999999997"
+    requested = client.post("/auth/request-otp", json={"phone": phone})
+    assert requested.status_code == 200
+    for _ in range(4):
+        response = client.post("/auth/verify-otp", json={"phone": phone, "otp": "000000"})
+        assert response.status_code == 401
+    locked = client.post("/auth/verify-otp", json={"phone": phone, "otp": "000000"})
+    assert locked.status_code == 429
+    requested_again = client.post("/auth/request-otp", json={"phone": phone})
+    assert requested_again.status_code == 429
