@@ -74,6 +74,8 @@ Use the same `X-Admin-Token` header for protected order operations.
 - `GET /admin/orders/{order_id}` — view order details, items, payment, address, and allowed next statuses
 - `PATCH /admin/orders/{order_id}/status` — advance an order through the validated lifecycle
 
+Customer UPI payment links are created through `POST /customers/me/orders/{order_id}/payment-link` after an authenticated UPI order reaches `PAYMENT_PENDING`. Existing links are reused, and Razorpay credentials remain server-side.
+
 Example status update:
 ```json
 {"status":"PACKING"}

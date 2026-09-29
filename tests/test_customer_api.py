@@ -71,6 +71,49 @@ def test_cart_and_orders():
     assert orders.json()["orders"][0]["order_id"] == order.json()["order_id"]
 
 
+
+def test_customer_upi_payment_link_is_created_and_reused():
+    from unittest.mock import patch
+
+    _reset_tomato_stock()
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    order = client.post("/customers/me/orders", headers=headers, json={
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 999, "quantity": 1}],
+        "address": "Main Road, Talegaon, 410507",
+        "payment_method": "UPI"
+    })
+    assert order.status_code == 200
+    order_id = order.json()["order_id"]
+    assert order.json()["status"] == "PAYMENT_PENDING"
+
+    with patch("app.customer_api.create_payment_link") as create_link:
+        create_link.return_value = {"id": "plink_customer_123", "short_url": "https://rzp.io/i/customer-test"}
+        first = client.post(f"/customers/me/orders/{order_id}/payment-link", headers=headers)
+        assert first.status_code == 200
+        assert first.json()["payment_link_url"] == "https://rzp.io/i/customer-test"
+        assert first.json()["razorpay_payment_link_id"] == "plink_customer_123"
+        create_link.assert_called_once_with(order_id, 40.0, "919999999999")
+
+        second = client.post(f"/customers/me/orders/{order_id}/payment-link", headers=headers)
+        assert second.status_code == 200
+        assert second.json()["payment_link_url"] == "https://rzp.io/i/customer-test"
+        assert create_link.call_count == 1
+
+
+def test_customer_upi_payment_link_requires_upi_order():
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    order = client.post("/customers/me/orders", headers=headers, json={
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 1}],
+        "address": "Main Road, Talegaon, 410507",
+        "payment_method": "COD"
+    })
+    assert order.status_code == 200
+    response = client.post(f"/customers/me/orders/{order.json()['order_id']}/payment-link", headers=headers)
+    assert response.status_code == 400
+
+
 def test_unauthorized_customer_api():
     response = client.get("/customers/me/cart")
     assert response.status_code == 401
