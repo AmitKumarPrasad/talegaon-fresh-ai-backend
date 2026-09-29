@@ -13,6 +13,7 @@ def list_inventory() -> list[dict]:
                 "unit": row.unit,
                 "stock_quantity": row.stock_quantity,
                 "in_stock": row.in_stock,
+                "image_url": row.image_url,
             }
             for row in rows
         ]
@@ -39,6 +40,7 @@ def update_inventory(product_id: int, stock_quantity: int) -> dict | None:
             "unit": product.unit,
             "stock_quantity": product.stock_quantity,
             "in_stock": product.in_stock,
+            "image_url": product.image_url,
         }
     except Exception:
         db.rollback()

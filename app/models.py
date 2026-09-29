@@ -23,6 +23,7 @@ class ProductModel(Base):
     price: Mapped[float] = mapped_column(Float)
     in_stock: Mapped[bool] = mapped_column(Boolean, default=True)
     stock_quantity: Mapped[int] = mapped_column(Integer, default=0)
+    image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class OrderModel(Base):
