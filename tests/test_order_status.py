@@ -13,6 +13,30 @@ class OrderStatusLifecycleTests(unittest.TestCase):
         self.assertEqual(get_allowed_transitions("DELIVERED"), set())
 
     @patch("app.order_status.SessionLocal")
+    def test_cancel_restores_reserved_stock_once(self, session_local):
+        db = session_local.return_value
+        order = type("Order", (), {"id": 101, "status": "CONFIRMED", "stock_reserved": True})()
+        item = type("Item", (), {"product_name": "Tomato", "quantity": 2})()
+        product = type("Product", (), {"stock_quantity": 5, "in_stock": True})()
+        db.get.return_value = order
+        query = db.query.return_value
+        query.filter.return_value = query
+        query.all.return_value = [item]
+        query.first.return_value = product
+        query.update.return_value = 1
+        self.assertTrue(transition_order(101, "CANCELLED"))
+        self.assertEqual(order.status, "CANCELLED")
+        self.assertFalse(order.stock_reserved)
+        query.update.assert_called_once()
+        db.commit.assert_called_once()
+
+        db.reset_mock()
+        db.get.return_value = order
+        self.assertFalse(transition_order(101, "CANCELLED"))
+        db.commit.assert_not_called()
+
+
+    @patch("app.order_status.SessionLocal")
     def test_valid_transition(self, session_local):
         db = session_local.return_value
         order = type("Order", (), {"status": "CONFIRMED"})()

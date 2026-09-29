@@ -1,5 +1,5 @@
 from app.db import SessionLocal
-from app.models import OrderModel
+from app.models import OrderItemModel, OrderModel, ProductModel
 
 ORDER_STATUSES = {
     "PENDING",
@@ -36,6 +36,24 @@ def transition_order(order_id: int, new_status: str) -> bool:
             return False
         if new_status not in ALLOWED_TRANSITIONS.get(order.status, set()):
             return False
+        if new_status == "CANCELLED" and order.stock_reserved:
+            items = db.query(OrderItemModel).filter(OrderItemModel.order_id == order.id).all()
+            for item in items:
+                updated = (
+                    db.query(ProductModel)
+                    .filter(ProductModel.name == item.product_name)
+                    .update(
+                        {ProductModel.stock_quantity: ProductModel.stock_quantity + int(item.quantity)},
+                        synchronize_session=False,
+                    )
+                )
+                if updated != 1:
+                    db.rollback()
+                    return False
+                product = db.query(ProductModel).filter(ProductModel.name == item.product_name).first()
+                if product:
+                    product.in_stock = product.stock_quantity > 0
+            order.stock_reserved = False
         order.status = new_status
         db.commit()
         return True

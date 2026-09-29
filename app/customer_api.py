@@ -230,6 +230,7 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
             db.add(OrderItemModel(order_id=order.id, product_name=product.name, quantity=item.quantity, unit_price=product.price, line_total=line_total))
             total += line_total
         order.total = round(total, 2)
+        order.stock_reserved = True
         if payload.payment_method:
             method = payload.payment_method.upper()
             if method not in {"UPI", "COD"}:
