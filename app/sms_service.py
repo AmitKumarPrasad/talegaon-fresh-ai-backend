@@ -9,6 +9,8 @@ credentials shown in the app's "Cloud Server" settings.
 import os
 import requests
 
+from app.phone_utils import to_e164
+
 SMS_GATEWAY_URL = os.getenv("SMS_GATEWAY_URL", "https://api.sms-gate.app/3rdparty/v1/message")
 
 
@@ -21,8 +23,11 @@ def send_sms(phone: str, message: str) -> dict:
     response = requests.post(
         SMS_GATEWAY_URL,
         auth=(username, password),
-        json={"message": message, "phoneNumbers": [phone]},
+        json={"message": message, "phoneNumbers": [to_e164(phone)]},
         timeout=15,
     )
-    response.raise_for_status()
+    if not response.ok:
+        raise requests.exceptions.HTTPError(
+            f"{response.status_code} error sending SMS: {response.text}", response=response
+        )
     return response.json()

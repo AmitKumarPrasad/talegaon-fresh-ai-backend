@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.auth import current_customer, logout_customer, request_otp, verify_otp
 from app.db import SessionLocal
@@ -17,11 +17,22 @@ class OtpRequest(BaseModel):
     phone: str = Field(min_length=7, max_length=30)
     name: str | None = Field(default=None, max_length=100)
 
+    @field_validator("phone", mode="before")
+    @classmethod
+    def _coerce_phone(cls, value: object) -> object:
+        return str(value) if isinstance(value, int) else value
+
 
 class OtpVerify(BaseModel):
     phone: str = Field(min_length=7, max_length=30)
     otp: str = Field(min_length=4, max_length=8)
     name: str | None = Field(default=None, max_length=100)
+
+    @field_validator("phone", "otp", mode="before")
+    @classmethod
+    def _coerce_str(cls, value: object) -> object:
+        return str(value) if isinstance(value, int) else value
+
 
 
 class AddressRequest(BaseModel):
