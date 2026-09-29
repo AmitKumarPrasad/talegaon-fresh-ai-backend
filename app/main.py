@@ -10,6 +10,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.admin_orders import get_admin_order, list_orders
+from app.admin_dashboard import get_dashboard_summary
 from app.customer_api import router as customer_router
 from app.catalog import product_menu
 from app.config import get_cors_allowed_origins, validate_production_config
@@ -27,6 +28,8 @@ from app.order_flow import process_order_message
 from app.seed import seed_products
 from app.price_service import (
     bulk_update_product_prices,
+    create_product,
+    delete_product,
     list_current_prices,
     price_history,
     update_product_price,
@@ -85,6 +88,15 @@ async def verify_webhook(request: Request):
 class PriceUpdateRequest(BaseModel):
     price: float = Field(gt=0)
     in_stock: bool | None = None
+    image_url: str | None = Field(default=None, max_length=500)
+
+
+class CreateProductRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    unit: str = Field(min_length=1, max_length=30)
+    price: float = Field(gt=0)
+    stock_quantity: int = Field(default=0, ge=0)
+    image_url: str | None = Field(default=None, max_length=500)
 
 
 class InventoryUpdateRequest(BaseModel):
@@ -104,6 +116,13 @@ class BulkPriceUpdateRequest(BaseModel):
 def _admin_authorized(request: Request) -> bool:
     configured = os.getenv("ADMIN_API_TOKEN")
     return bool(configured) and request.headers.get("X-Admin-Token") == configured
+
+
+@app.get("/admin/dashboard")
+async def admin_dashboard(request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    return get_dashboard_summary()
 
 
 @app.get("/admin/inventory")
@@ -145,6 +164,28 @@ async def admin_seed_products(request: Request):
     return {"products": list_current_prices(), "message": "Missing catalog products were initialized."}
 
 
+@app.post("/admin/products")
+async def admin_create_product(payload: CreateProductRequest, request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    try:
+        product = create_product(
+            payload.name, payload.unit, payload.price, payload.stock_quantity, payload.image_url
+        )
+    except ValueError as exc:
+        return PlainTextResponse(str(exc), status_code=400)
+    return product
+
+
+@app.delete("/admin/products/{product_id}")
+async def admin_delete_product(product_id: int, request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    if not delete_product(product_id):
+        return PlainTextResponse("Product not found", status_code=404)
+    return {"status": "deleted"}
+
+
 @app.put("/admin/prices/bulk")
 async def admin_bulk_update_prices(
     payload: BulkPriceUpdateRequest,
@@ -166,7 +207,7 @@ async def admin_update_price(product_id: int, payload: PriceUpdateRequest, reque
     if not _admin_authorized(request):
         return PlainTextResponse("Unauthorized", status_code=401)
     try:
-        product = update_product_price(product_id, payload.price, payload.in_stock)
+        product = update_product_price(product_id, payload.price, payload.in_stock, payload.image_url)
     except ValueError as exc:
         return PlainTextResponse(str(exc), status_code=400)
     if not product:

@@ -15,6 +15,7 @@ def list_current_prices() -> list[dict]:
                 "unit": row.unit,
                 "price": row.price,
                 "in_stock": row.in_stock,
+                "image_url": row.image_url,
             }
             for row in rows
         ]
@@ -29,10 +30,51 @@ def _product_response(product: ProductModel) -> dict:
         "unit": product.unit,
         "price": product.price,
         "in_stock": product.in_stock,
+        "image_url": getattr(product, "image_url", None),
     }
 
 
-def update_product_price(product_id: int, price: float, in_stock: bool | None = None) -> dict | None:
+def create_product(name: str, unit: str, price: float, stock_quantity: int = 0, image_url: str | None = None) -> dict:
+    if price <= 0:
+        raise ValueError("Price must be greater than zero.")
+    if stock_quantity < 0:
+        raise ValueError("Stock quantity cannot be negative.")
+
+    db = SessionLocal()
+    try:
+        existing = db.query(ProductModel).filter(ProductModel.name.ilike(name)).first()
+        if existing:
+            raise ValueError(f"Product already exists: {existing.name}")
+        product = ProductModel(
+            name=name,
+            unit=unit,
+            price=price,
+            stock_quantity=stock_quantity,
+            in_stock=stock_quantity > 0,
+            image_url=image_url,
+        )
+        db.add(product)
+        db.commit()
+        db.refresh(product)
+        return _product_response(product)
+    finally:
+        db.close()
+
+
+def delete_product(product_id: int) -> bool:
+    db = SessionLocal()
+    try:
+        product = db.get(ProductModel, product_id)
+        if not product:
+            return False
+        db.delete(product)
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+
+def update_product_price(product_id: int, price: float, in_stock: bool | None = None, image_url: str | None = None) -> dict | None:
     if price <= 0:
         raise ValueError("Price must be greater than zero.")
 
@@ -45,6 +87,8 @@ def update_product_price(product_id: int, price: float, in_stock: bool | None = 
         product.price = price
         if in_stock is not None:
             product.in_stock = in_stock
+        if image_url is not None:
+            product.image_url = image_url
 
         now = datetime.now(timezone.utc)
         db.add(
