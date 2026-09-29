@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, Field, field_validator
+import os
 
 from app.auth import current_customer, logout_customer, request_otp, verify_otp
 from app.db import SessionLocal
@@ -95,8 +96,10 @@ def _order_dict(db, order: OrderModel) -> dict:
 
 
 @router.post("/auth/request-otp")
-def auth_request(payload: OtpRequest):
-    return request_otp(payload.phone, payload.name)
+def auth_request(payload: OtpRequest, x_admin_token: str | None = Header(default=None)):
+    admin_token = os.getenv("ADMIN_API_TOKEN")
+    reveal_otp = bool(admin_token) and x_admin_token == admin_token
+    return request_otp(payload.phone, payload.name, reveal_otp=reveal_otp)
 
 
 @router.post("/auth/verify-otp")
