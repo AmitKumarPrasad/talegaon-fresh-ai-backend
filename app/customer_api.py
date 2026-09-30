@@ -103,7 +103,6 @@ def _order_dict(db, order: OrderModel) -> dict:
     items = db.query(OrderItemModel).filter(OrderItemModel.order_id == order.id).all()
     return {
         "order_id": order.id,
-        "customer_id": order.customer_id,
         "status": order.status,
         "allowed_next_statuses": sorted(get_allowed_transitions(order.status)),
         "total": order.total,
@@ -254,7 +253,7 @@ def mobile_ai_chat(
     try:
         reply = _mobile_ai_reply(payload.message)
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail="AI service is temporarily unavailable.") from exc
     return {"reply": reply}
 
 
@@ -327,12 +326,11 @@ def create_customer_payment_link(
         raise HTTPException(status_code=400, detail="Order payment method must be UPI")
     if order["status"] != "PAYMENT_PENDING":
         raise HTTPException(status_code=409, detail="Order is not awaiting UPI payment")
-    if order.get("payment_link_url") and order.get("razorpay_payment_link_id"):
+    if order.get("payment_link_url"):
         return {
             "order_id": order_id,
             "status": order["status"],
             "payment_link_url": order["payment_link_url"],
-            "razorpay_payment_link_id": order["razorpay_payment_link_id"],
         }
     try:
         link = create_payment_link(order_id, order["total"], customer.phone)
@@ -344,7 +342,6 @@ def create_customer_payment_link(
         "order_id": order_id,
         "status": "PAYMENT_PENDING",
         "payment_link_url": link["short_url"],
-        "razorpay_payment_link_id": link["id"],
     }
 
 @router.get("/customers/me/orders/{order_id}")
