@@ -14,6 +14,7 @@ from app.payment_service import PaymentError, create_payment_link
 from app.order_status import get_allowed_transitions
 from app.delivery_service import add_message_by_customer, get_tracking_info, list_messages_for_customer
 from app.seller_notification import notify_seller
+from app.state import get_state
 
 router = APIRouter()
 
@@ -58,7 +59,6 @@ class OtpVerify(BaseModel):
     @classmethod
     def _coerce_str(cls, value: object) -> object:
         return str(value) if isinstance(value, int) else value
-
 
 
 class AddressRequest(BaseModel):
@@ -139,19 +139,33 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
             "where is my order",
         )
     )
-    asks_specific_order = order_match is not None and (
-        "order" in normalized or asks_status
+    state = get_state(customer_id)
+    awaiting_order_id = state.status_order_lookup
+    is_order_id_reply = awaiting_order_id and normalized.isdigit() and order_match is not None
+    asks_specific_order = (
+        order_match is not None
+        and ("order" in normalized or asks_status or is_order_id_reply)
     )
 
-    basic_intents = {"hi", "hello", "hey", "hii", "good morning", "good afternoon", "good evening", "help", "what can you do", "how can you help"}
+    basic_intents = {
+        "hi", "hello", "hey", "hii", "good morning", "good afternoon",
+        "good evening", "help", "what can you do", "how can you help"
+    }
     if normalized in basic_intents:
-        return ("Hi! 👋 I can help with your Talegaon Fresh orders. You can ask for your latest order, order status, tracking, or order details.")
+        return (
+            "Hi! 👋 I can help with your Talegaon Fresh orders. "
+            "You can ask for your latest order, order status, tracking, or order details."
+        )
 
     if tracking_without_order:
+        state.status_order_lookup = True
         return (
             "Sure — I can check the tracking for you. "
             "Please share the Order ID shown in My Orders."
         )
+
+    if is_order_id_reply:
+        asks_status = True
 
     db = SessionLocal()
     try:
@@ -162,7 +176,7 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
             if candidate and candidate.customer_id == customer_id:
                 order = candidate
 
-        if order is None and (asks_status or asks_order_number):
+        if order is None and (asks_status or asks_order_number) and not is_order_id_reply:
             order = (
                 db.query(OrderModel)
                 .filter(OrderModel.customer_id == customer_id)
@@ -185,9 +199,13 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
                 reply += f"\nDelivery partner: {tracking['delivery_person_name']}"
             if tracking and tracking.get("delivery_location_updated_at"):
                 reply += f"\nLive location updated: {tracking['delivery_location_updated_at']}"
+            if awaiting_order_id:
+                state.status_order_lookup = False
             return reply
 
         if order_match and asks_status:
+            if awaiting_order_id:
+                state.status_order_lookup = False
             return (
                 "I couldn't find that order under your account. "
                 "Please check the Order ID shown in My Orders."
@@ -428,7 +446,6 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
                 payment_method=order.payment_method or "PAYMENT_PENDING",
             )
         except Exception:
-            # Customer checkout must not fail because seller notification is unavailable.
             import logging
             logging.getLogger(__name__).exception(
                 "Order created but seller notification failed order_id=%s", order.id
@@ -436,7 +453,6 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
         return response
     finally:
         db.close()
-
 
 
 @router.post("/customers/me/orders/{order_id}/payment-link")
@@ -468,6 +484,7 @@ def create_customer_payment_link(
         "status": "PAYMENT_PENDING",
         "payment_link_url": link["short_url"],
     }
+
 
 @router.get("/customers/me/orders/{order_id}")
 def get_customer_order_details(order_id: int, customer: CustomerModel = Depends(current_customer)):
@@ -509,4 +526,3 @@ def send_order_message(order_id: int, payload: OrderMessageRequest, customer: Cu
     if message is None:
         raise HTTPException(status_code=404, detail="Order not found")
     return message
-
