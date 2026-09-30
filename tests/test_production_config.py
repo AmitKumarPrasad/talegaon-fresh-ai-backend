@@ -48,6 +48,17 @@ class ProductionConfigTests(unittest.TestCase):
         with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=True):
             self.assertEqual(get_cors_allowed_origins(), [])
 
+    def test_production_cors_accepts_explicit_https_origins(self):
+        env = {
+            "ENVIRONMENT": "production",
+            "CORS_ALLOWED_ORIGINS": "https://app.example.com, https://admin.example.com/",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            self.assertEqual(
+                get_cors_allowed_origins(),
+                ["https://app.example.com", "https://admin.example.com"],
+            )
+
     def test_production_cors_rejects_wildcard(self):
         with patch.dict(
             os.environ,
@@ -55,6 +66,24 @@ class ProductionConfigTests(unittest.TestCase):
             clear=True,
         ):
             with self.assertRaisesRegex(RuntimeError, "CORS_ALLOWED_ORIGINS"):
+                get_cors_allowed_origins()
+
+    def test_production_cors_rejects_non_https_origin(self):
+        with patch.dict(
+            os.environ,
+            {"ENVIRONMENT": "production", "CORS_ALLOWED_ORIGINS": "http://app.example.com"},
+            clear=True,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "HTTPS"):
+                get_cors_allowed_origins()
+
+    def test_production_cors_rejects_origin_with_path(self):
+        with patch.dict(
+            os.environ,
+            {"ENVIRONMENT": "production", "CORS_ALLOWED_ORIGINS": "https://app.example.com/login"},
+            clear=True,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "paths"):
                 get_cors_allowed_origins()
 
     def test_production_requires_core_config(self):
