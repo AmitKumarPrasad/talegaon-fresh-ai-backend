@@ -59,6 +59,16 @@ class OrderStatusLifecycleTests(unittest.TestCase):
         self.assertEqual(list_status_history(101, "customer-1"), [{"id": 1, "from_status": "CONFIRMED", "to_status": "PACKING", "created_at": None}])
 
     @patch("app.order_status.SessionLocal")
+    def test_transition_runs_order_update_and_records_history(self, session_local):
+        db = session_local.return_value
+        order = type("Order", (), {"id": 101, "status": "PENDING", "stock_reserved": False})()
+        db.get.return_value = order
+        self.assertTrue(transition_order(101, "ADDRESS_CONFIRMED", lambda value: setattr(value, "address", "Talegaon")))
+        self.assertEqual(order.address, "Talegaon")
+        self.assertEqual(order.status, "ADDRESS_CONFIRMED")
+        db.add.assert_called_once()
+
+    @patch("app.order_status.SessionLocal")
     def test_invalid_transition_is_rejected(self, session_local):
         db = session_local.return_value
         order = type("Order", (), {"status": "PENDING"})()
