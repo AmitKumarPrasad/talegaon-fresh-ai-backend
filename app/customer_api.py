@@ -130,6 +130,15 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
             "order details",
         )
     )
+    tracking_without_order = asks_status and order_match is None and any(
+        term in normalized
+        for term in (
+            "tracking",
+            "track order",
+            "track my order",
+            "where is my order",
+        )
+    )
     asks_specific_order = order_match is not None and (
         "order" in normalized or asks_status
     )
@@ -137,6 +146,12 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
     basic_intents = {"hi", "hello", "hey", "hii", "good morning", "good afternoon", "good evening", "help", "what can you do", "how can you help"}
     if normalized in basic_intents:
         return ("Hi! 👋 I can help with your Talegaon Fresh orders. You can ask for your latest order, order status, tracking, or order details.")
+
+    if tracking_without_order:
+        return (
+            "Sure — I can check the tracking for you. "
+            "Please share the Order ID shown in My Orders."
+        )
 
     db = SessionLocal()
     try:
