@@ -8,7 +8,7 @@ import os
 from app.auth import current_customer, logout_customer
 from app.pin_auth import register as register_pin, login as login_pin, refresh as refresh_pin, revoke as revoke_refresh
 from app.db import SessionLocal
-from app.models import AddressModel, CustomerModel, OrderItemModel, OrderModel, ProductModel
+from app.models import AddressModel, CustomerModel, OrderItemModel, OrderModel, OrderStatusHistoryModel, ProductModel
 from app.order_details import get_customer_order, save_payment_link
 from app.payment_service import PaymentError, create_payment_link
 from app.order_status import get_allowed_transitions, list_status_history
@@ -433,7 +433,13 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
             if method not in {"UPI", "COD"}:
                 raise HTTPException(status_code=400, detail="Invalid payment method")
             order.payment_method = method
-            order.status = "PAYMENT_PENDING" if method == "UPI" else "CONFIRMED"
+            next_status = "PAYMENT_PENDING" if method == "UPI" else "CONFIRMED"
+            order.status = next_status
+            db.add(OrderStatusHistoryModel(
+                order_id=order.id,
+                from_status="PENDING",
+                to_status=next_status,
+            ))
         db.commit()
         db.refresh(order)
         response = _order_dict(db, order)
