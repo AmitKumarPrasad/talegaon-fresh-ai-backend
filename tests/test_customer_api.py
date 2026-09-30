@@ -350,3 +350,47 @@ def test_checkout_notifies_seller_after_order_commit():
             db.delete(test_product)
         db.commit()
         db.close()
+
+
+def test_ai_order_number_query_returns_latest_order_without_llm():
+    from unittest.mock import patch
+
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    _reset_tomato_stock()
+    order = client.post("/customers/me/orders", headers=headers, json={
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 1}],
+        "address": "Main Road, Talegaon, 410507",
+        "payment_method": "COD",
+    })
+    assert order.status_code == 200
+    order_id = order.json()["order_id"]
+
+    with patch("app.openai_service.generate_mobile_reply") as generate:
+        response = client.post(
+            "/customers/me/ai/chat",
+            headers=headers,
+            json={"message": "What is my latest order number?"},
+        )
+
+    assert response.status_code == 200
+    assert f"Order #{order_id}" in response.json()["reply"]
+    generate.assert_not_called()
+
+
+def test_ai_specific_order_status_does_not_leak_other_customer_order():
+    from unittest.mock import patch
+
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch("app.openai_service.generate_mobile_reply") as generate:
+        response = client.post(
+            "/customers/me/ai/chat",
+            headers=headers,
+            json={"message": "What is the status of order 999999?"},
+        )
+
+    assert response.status_code == 200
+    assert "couldn't find that order under your account" in response.json()["reply"].lower()
+    generate.assert_not_called()
