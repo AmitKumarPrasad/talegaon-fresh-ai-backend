@@ -11,7 +11,7 @@ from app.db import SessionLocal
 from app.models import AddressModel, CustomerModel, OrderItemModel, OrderModel, ProductModel
 from app.order_details import get_customer_order, save_payment_link
 from app.payment_service import PaymentError, create_payment_link
-from app.order_status import get_allowed_transitions
+from app.order_status import get_allowed_transitions, list_status_history
 from app.delivery_service import add_message_by_customer, get_tracking_info, list_messages_for_customer
 from app.seller_notification import notify_seller
 from app.state import get_state
@@ -502,6 +502,14 @@ def list_customer_orders(customer: CustomerModel = Depends(current_customer)):
         return {"orders": [_order_dict(db, order) for order in orders]}
     finally:
         db.close()
+
+
+@router.get("/customers/me/orders/{order_id}/status-history")
+def get_order_status_history(order_id: int, customer: CustomerModel = Depends(current_customer)):
+    order = get_customer_order(order_id, customer.phone)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return {"order_id": order_id, "history": list_status_history(order_id, customer.phone)}
 
 
 @router.get("/customers/me/orders/{order_id}/tracking")
