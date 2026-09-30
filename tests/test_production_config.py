@@ -16,6 +16,7 @@ class ProductionConfigTests(unittest.TestCase):
             "ADMIN_API_TOKEN": "admin",
             "DATABASE_URL": "postgresql://user:pass@localhost/db",
             "JWT_SECRET": "configured-strong-secret-12345678901234567890",
+            "REDIS_URL": "redis://localhost:6379",
         }
         with patch.dict(os.environ, env, clear=True):
             validate_production_config()
@@ -25,6 +26,7 @@ class ProductionConfigTests(unittest.TestCase):
             "ENVIRONMENT": "production",
             "ADMIN_API_TOKEN": "admin",
             "DATABASE_URL": "postgresql://user:pass@localhost/db",
+            "REDIS_URL": "redis://localhost:6379",
         }
         with patch.dict(os.environ, env, clear=True):
             with self.assertRaisesRegex(RuntimeError, "JWT_SECRET"):
