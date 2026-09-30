@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, Field, field_validator
@@ -12,6 +13,7 @@ from app.order_details import get_customer_order, save_payment_link
 from app.payment_service import PaymentError, create_payment_link
 from app.order_status import get_allowed_transitions
 from app.delivery_service import add_message_by_customer, get_tracking_info, list_messages_for_customer
+from app.seller_notification import notify_seller
 
 router = APIRouter()
 
@@ -89,9 +91,42 @@ class AiChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
 
 
-def _mobile_ai_reply(message: str) -> str:
-    from app.openai_service import generate_mobile_reply
+def _mobile_ai_reply(message: str, customer_id: str) -> str:
+    """Return authoritative order answers before falling back to the LLM."""
+    normalized = message.strip().lower()
+    match = re.search(r"\\b(?:order\\s*(?:id|number|no|#)?\\s*)?(\\d{1,10})\\b", normalized)
+    asks_status = any(term in normalized for term in ("order status", "tracking", "track my", "where is my order", "status of my order"))
+    asks_order_number = any(term in normalized for term in ("order number", "order id", "my order no", "my order number")) and not match
 
+    db = SessionLocal()
+    try:
+        order = None
+        if match and (asks_status or "order" in normalized):
+            order_id = int(match.group(1))
+            candidate = db.get(OrderModel, order_id)
+            if candidate and candidate.customer_id == customer_id:
+                order = candidate
+        if order is None and (asks_status or asks_order_number):
+            order = (
+                db.query(OrderModel)
+                .filter(OrderModel.customer_id == customer_id)
+                .order_by(OrderModel.id.desc())
+                .first()
+            )
+        if order is not None and (asks_status or asks_order_number):
+            return (
+                f"📦 Your latest order is Order #{order.id}.\\n"
+                f"Status: {order.status.replace('_', ' ').title()}\\n"
+                f"Total: ₹{order.total:.2f}\\n"
+                f"Payment: {order.payment_method or 'Not selected'}\\n"
+                f"Delivery: {order.address or 'Not provided'}"
+            )
+        if match and asks_status:
+            return "I couldn't find that order under your account. Please check the Order ID shown in My Orders."
+    finally:
+        db.close()
+
+    from app.openai_service import generate_mobile_reply
     return generate_mobile_reply(message)
 
 
@@ -251,7 +286,7 @@ def mobile_ai_chat(
     customer: CustomerModel = Depends(current_customer),
 ):
     try:
-        reply = _mobile_ai_reply(payload.message)
+        reply = _mobile_ai_reply(payload.message, customer.phone)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="AI service is temporarily unavailable.") from exc
     return {"reply": reply}
@@ -308,7 +343,22 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
             order.status = "PAYMENT_PENDING" if method == "UPI" else "CONFIRMED"
         db.commit()
         db.refresh(order)
-        return _order_dict(db, order)
+        response = _order_dict(db, order)
+        try:
+            notify_seller(
+                order_id=order.id,
+                customer_id=customer.phone,
+                total=order.total,
+                address=order.address,
+                payment_method=order.payment_method or "PAYMENT_PENDING",
+            )
+        except Exception:
+            # Customer checkout must not fail because seller notification is unavailable.
+            import logging
+            logging.getLogger(__name__).exception(
+                "Order created but seller notification failed order_id=%s", order.id
+            )
+        return response
     finally:
         db.close()
 

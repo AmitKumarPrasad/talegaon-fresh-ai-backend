@@ -37,7 +37,16 @@ class MobileAiApiTests(unittest.TestCase):
             response = client.post("/customers/me/ai/chat", headers=headers, json={"message": "How much are tomatoes?"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["reply"], "Please check the Products screen for live prices and stock.")
-        reply.assert_called_once_with("How much are tomatoes?")
+        reply.assert_called_once_with("How much are tomatoes?", "918888888888")
+
+    def test_order_status_query_uses_authoritative_customer_order(self):
+        token = auth()
+        headers = {"Authorization": f"Bearer {token}"}
+        with patch("app.customer_api._mobile_ai_reply", return_value="authoritative") as reply:
+            response = client.post("/customers/me/ai/chat", headers=headers, json={"message": "What is my order number?"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["reply"], "authoritative")
+        reply.assert_called_once_with("What is my order number?", "918888888888")
 
 
 if __name__ == "__main__":
