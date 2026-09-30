@@ -782,10 +782,6 @@ async def razorpay_webhook(request: Request):
         )
         return {"status": "ignored"}
 
-    if not claim_event("razorpay", event_id):
-        logger.info("Razorpay webhook duplicate event_id=%s", event_id)
-        return {"status": "duplicate"}
-
     confirmed = confirm_upi_payment(
         order_id=order_id,
         payment_link_id=event["payment_link_id"],
@@ -796,12 +792,15 @@ async def razorpay_webhook(request: Request):
 
     if not confirmed:
         logger.info(
-            "Razorpay payment already processed or could not be confirmed order_id=%s payment_id=%s event_id=%s",
+            "Razorpay payment already processed or could not be confirmed order_id=%s event_id=%s",
             order_id,
-            event["payment_id"],
             event_id,
         )
         return {"status": "processed"}
+
+    # Claim only after the payment transaction succeeds. This prevents a transient
+    # database failure from permanently consuming a valid provider event.
+    claim_event("razorpay", event_id)
 
     customer_id = order["customer_id"]
 
