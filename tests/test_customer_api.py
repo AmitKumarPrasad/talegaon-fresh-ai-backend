@@ -394,3 +394,41 @@ def test_ai_specific_order_status_does_not_leak_other_customer_order():
     assert response.status_code == 200
     assert "couldn't find that order under your account" in response.json()["reply"].lower()
     generate.assert_not_called()
+
+
+def test_ai_order_status_language_does_not_fall_back_to_llm():
+    from unittest.mock import patch
+
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch("app.openai_service.generate_mobile_reply") as generate:
+        response = client.post(
+            "/customers/me/ai/chat",
+            headers=headers,
+            json={"message": "Can you check my order?"},
+        )
+
+    assert response.status_code == 200
+    reply = response.json()["reply"].lower()
+    assert "order" in reply
+    assert "order id" in reply or "my orders" in reply or "couldn't find" in reply
+    generate.assert_not_called()
+
+
+def test_ai_order_query_with_no_orders_gives_clear_next_step():
+    from unittest.mock import patch
+
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch("app.openai_service.generate_mobile_reply") as generate:
+        response = client.post(
+            "/customers/me/ai/chat",
+            headers=headers,
+            json={"message": "Show my orders"},
+        )
+
+    assert response.status_code == 200
+    assert "place an order first" in response.json()["reply"].lower()
+    generate.assert_not_called()
