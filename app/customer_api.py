@@ -94,18 +94,44 @@ class AiChatRequest(BaseModel):
 def _mobile_ai_reply(message: str, customer_id: str) -> str:
     """Return authoritative order answers before falling back to the LLM."""
     normalized = message.strip().lower()
-    match = re.search(r"\\b(?:order\\s*(?:id|number|no|#)?\\s*)?(\\d{1,10})\\b", normalized)
-    asks_status = any(term in normalized for term in ("order status", "tracking", "track my", "where is my order", "status of my order"))
-    asks_order_number = any(term in normalized for term in ("order number", "order id", "my order no", "my order number")) and not match
+    order_match = re.search(
+        r"\b(?:order\s*(?:id|number|no|#)?\s*)?(\d{1,10})\b",
+        normalized,
+    )
+    asks_status = any(
+        term in normalized
+        for term in (
+            "order status",
+            "tracking",
+            "track my",
+            "track order",
+            "where is my order",
+            "status of my order",
+        )
+    )
+    asks_order_number = any(
+        term in normalized
+        for term in (
+            "order number",
+            "order id",
+            "my order no",
+            "my order number",
+            "what is my order",
+        )
+    )
+    asks_specific_order = order_match is not None and (
+        "order" in normalized or asks_status
+    )
 
     db = SessionLocal()
     try:
         order = None
-        if match and (asks_status or "order" in normalized):
-            order_id = int(match.group(1))
+        if asks_specific_order:
+            order_id = int(order_match.group(1))
             candidate = db.get(OrderModel, order_id)
             if candidate and candidate.customer_id == customer_id:
                 order = candidate
+
         if order is None and (asks_status or asks_order_number):
             order = (
                 db.query(OrderModel)
@@ -113,16 +139,29 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
                 .order_by(OrderModel.id.desc())
                 .first()
             )
+
         if order is not None and (asks_status or asks_order_number):
-            return (
-                f"📦 Your latest order is Order #{order.id}.\\n"
-                f"Status: {order.status.replace('_', ' ').title()}\\n"
-                f"Total: ₹{order.total:.2f}\\n"
-                f"Payment: {order.payment_method or 'Not selected'}\\n"
-                f"Delivery: {order.address or 'Not provided'}"
+            status = order.status.replace("_", " ").title()
+            tracking = get_tracking_info(order.id, customer_id) if asks_status else None
+            reply = (
+                f"📦 Order #{order.id}\n"
+                f"Status: {status}\n"
+                f"Total: ₹{order.total:.2f}\n"
+                f"Payment: {order.payment_method or 'Not selected'}"
             )
-        if match and asks_status:
-            return "I couldn't find that order under your account. Please check the Order ID shown in My Orders."
+            if order.address:
+                reply += f"\nDelivery: {order.address}"
+            if tracking and tracking.get("delivery_person_name"):
+                reply += f"\nDelivery partner: {tracking['delivery_person_name']}"
+            if tracking and tracking.get("delivery_location_updated_at"):
+                reply += f"\nLive location updated: {tracking['delivery_location_updated_at']}"
+            return reply
+
+        if order_match and asks_status:
+            return (
+                "I couldn't find that order under your account. "
+                "Please check the Order ID shown in My Orders."
+            )
     finally:
         db.close()
 
