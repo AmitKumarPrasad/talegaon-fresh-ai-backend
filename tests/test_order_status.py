@@ -39,7 +39,7 @@ class OrderStatusLifecycleTests(unittest.TestCase):
     @patch("app.order_status.SessionLocal")
     def test_valid_transition(self, session_local):
         db = session_local.return_value
-        order = type("Order", (), {"status": "CONFIRMED"})()
+        order = type("Order", (), {"id": 101, "status": "CONFIRMED", "stock_reserved": False})()
         db.get.return_value = order
         self.assertTrue(transition_order(101, "PACKING"))
         self.assertEqual(order.status, "PACKING")
