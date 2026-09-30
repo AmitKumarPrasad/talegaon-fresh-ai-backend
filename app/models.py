@@ -44,6 +44,7 @@ class OrderModel(Base):
     delivery_person_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     delivery_person_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     delivery_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
+    delivery_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     delivery_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     delivery_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     delivery_location_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
