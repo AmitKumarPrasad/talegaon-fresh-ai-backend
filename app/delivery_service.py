@@ -1,8 +1,19 @@
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.db import SessionLocal
 from app.models import OrderItemModel, OrderMessageModel, OrderModel
+
+DELIVERY_TOKEN_TTL = timedelta(hours=24)
+
+
+def _token_is_active(order: OrderModel, now: datetime | None = None) -> bool:
+    expires_at = order.delivery_token_expires_at
+    if not expires_at:
+        return False
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at > (now or datetime.now(timezone.utc))
 
 
 def _order_dict(order: OrderModel) -> dict:
@@ -27,8 +38,9 @@ def assign_delivery_person(order_id: int, name: str, phone: str) -> dict | None:
             return None
         order.delivery_person_name = name
         order.delivery_person_phone = phone
-        if not order.delivery_token:
+        if not order.delivery_token or not _token_is_active(order):
             order.delivery_token = secrets.token_urlsafe(24)
+            order.delivery_token_expires_at = datetime.now(timezone.utc) + DELIVERY_TOKEN_TTL
         db.commit()
         db.refresh(order)
         return {**_order_dict(order), "delivery_token": order.delivery_token}
@@ -50,7 +62,8 @@ def get_tracking_info(order_id: int, customer_id: str) -> dict | None:
 def get_order_by_delivery_token(token: str) -> OrderModel | None:
     db = SessionLocal()
     try:
-        return db.query(OrderModel).filter(OrderModel.delivery_token == token).first()
+        order = db.query(OrderModel).filter(OrderModel.delivery_token == token).first()
+        return order if order and _token_is_active(order) else None
     finally:
         db.close()
 
@@ -59,7 +72,7 @@ def get_delivery_order_summary(token: str) -> dict | None:
     db = SessionLocal()
     try:
         order = db.query(OrderModel).filter(OrderModel.delivery_token == token).first()
-        if not order:
+        if not order or not _token_is_active(order):
             return None
         items = db.query(OrderItemModel).filter(OrderItemModel.order_id == order.id).all()
         return {
@@ -83,7 +96,7 @@ def update_delivery_location(token: str, lat: float, lng: float) -> bool:
     db = SessionLocal()
     try:
         order = db.query(OrderModel).filter(OrderModel.delivery_token == token).first()
-        if not order:
+        if not order or not _token_is_active(order):
             return False
         order.delivery_lat = lat
         order.delivery_lng = lng
