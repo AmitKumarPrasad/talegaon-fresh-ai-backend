@@ -60,7 +60,10 @@ Customer orders always calculate totals from the current database price; the AI 
 
 Build the image with Docker and provide production environment variables at runtime. The image runs Alembic migrations before starting FastAPI and listens on 0.0.0.0 using PORT.
 
-Health endpoint: GET /health
+Liveness endpoint: GET /health  
+Readiness endpoint: GET /ready
+
+`/health` only confirms that the application process is running. `/ready` verifies the PostgreSQL and Redis dependencies and returns HTTP 503 while either dependency is unavailable. Configure the platform health check to use `/ready` when deployment should only receive traffic after both dependencies are reachable.
 
 Set `ENVIRONMENT=production` in production.
 
