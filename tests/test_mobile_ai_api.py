@@ -15,12 +15,14 @@ client = TestClient(app)
 
 
 def auth():
-    requested = client.post("/auth/request-otp", json={"phone": "918888888888", "name": "AI Test User"})
-    assert requested.status_code == 200
-    otp = requested.json()["demo_otp"]
-    verified = client.post("/auth/verify-otp", json={"phone": "918888888888", "otp": otp})
-    assert verified.status_code == 200
-    return verified.json()["token"]
+    payload = {"phone": "918888888888", "name": "AI Test User", "pin": "123456", "device_id": "test-device-918888888888"}
+    registered = client.post("/auth/register", json=payload)
+    if registered.status_code == 409:
+        logged_in = client.post("/auth/login", json=payload)
+        assert logged_in.status_code == 200
+        return logged_in.json()["access_token"]
+    assert registered.status_code == 200
+    return registered.json()["access_token"]
 
 
 class MobileAiApiTests(unittest.TestCase):
