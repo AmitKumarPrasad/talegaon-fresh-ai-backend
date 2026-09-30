@@ -33,6 +33,7 @@ from app.order_details import (
     update_payment,
 )
 from app.order_flow import process_order_message
+from app.order_status import list_status_history
 from app.seed import seed_products
 from app.price_service import (
     bulk_update_product_prices,
@@ -285,6 +286,16 @@ async def admin_order(order_id: int, request: Request):
     if not order:
         return PlainTextResponse("Order not found", status_code=404)
     return order
+
+
+@app.get("/admin/orders/{order_id}/status-history")
+async def admin_order_status_history(order_id: int, request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    order = get_admin_order(order_id)
+    if not order:
+        return PlainTextResponse("Order not found", status_code=404)
+    return {"order_id": order_id, "history": list_status_history(order_id)}
 
 
 class AssignDeliveryRequest(BaseModel):
