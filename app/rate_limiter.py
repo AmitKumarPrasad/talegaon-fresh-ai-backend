@@ -45,6 +45,55 @@ def _client() -> Redis:
     return _redis
 
 
+async def check_redis() -> None:
+    await _client().ping()
+
+
+async def readiness_response(request: Request) -> JSONResponse | None:
+    if request.url.path != "/ready":
+        return None
+
+    database_ok = False
+    redis_ok = False
+    try:
+        from sqlalchemy import text
+        from app.db import engine
+
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        database_ok = True
+    except Exception:
+        database_ok = False
+
+    try:
+        await check_redis()
+        redis_ok = True
+    except Exception:
+        redis_ok = False
+
+    if database_ok and redis_ok:
+        return JSONResponse(
+            {
+                "service": "Talegaon Fresh AI Agent",
+                "status": "ready",
+                "dependencies": {"database": "ok", "redis": "ok"},
+            }
+        )
+
+    return JSONResponse(
+        {
+            "service": "Talegaon Fresh AI Agent",
+            "status": "not_ready",
+            "dependencies": {
+                "database": "ok" if database_ok else "unavailable",
+                "redis": "ok" if redis_ok else "unavailable",
+            },
+        },
+        status_code=503,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 def client_ip(request: Request) -> str:
     # Render's public edge provides CF-Connecting-IP. Fall back to the
     # first X-Forwarded-For value when Cloudflare's header is unavailable.
@@ -64,6 +113,10 @@ def rule_for(path: str) -> tuple[int, int] | None:
 
 
 async def enforce_rate_limit(request: Request) -> JSONResponse | None:
+    readiness = await readiness_response(request)
+    if readiness is not None:
+        return readiness
+
     rule = rule_for(request.url.path)
     if not rule:
         return None
