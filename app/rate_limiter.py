@@ -1,0 +1,99 @@
+import os
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from redis.asyncio import Redis
+
+_WINDOW_RULES = {
+    "/auth/login": (10, 60),
+    "/auth/register": (5, 600),
+    "/auth/refresh": (30, 60),
+    "/auth/request-otp": (5, 600),
+    "/auth/verify-otp": (10, 600),
+    "/customers/me/ai/chat": (20, 60),
+}
+_ADMIN_RULE = (60, 60)
+
+_RATE_SCRIPT = """
+local current = redis.call('GET', KEYS[1])
+if not current then
+  redis.call('SET', KEYS[1], 1, 'EX', ARGV[2])
+  return {1, ARGV[1] - 1, ARGV[2]}
+end
+current = redis.call('INCR', KEYS[1])
+local ttl = redis.call('TTL', KEYS[1])
+if current <= tonumber(ARGV[1]) then
+  return {1, tonumber(ARGV[1]) - current, ttl}
+end
+return {0, 0, ttl}
+"""
+
+_redis: Redis | None = None
+
+
+def _environment() -> str:
+    return os.getenv("ENVIRONMENT", "development").lower()
+
+
+def _client() -> Redis:
+    global _redis
+    if _redis is None:
+        url = os.getenv("REDIS_URL")
+        if not url:
+            raise RuntimeError("REDIS_URL is required for production rate limiting.")
+        _redis = Redis.from_url(url, decode_responses=False)
+    return _redis
+
+
+def client_ip(request: Request) -> str:
+    # Render's public edge provides CF-Connecting-IP. Fall back to the
+    # first X-Forwarded-For value when Cloudflare's header is unavailable.
+    cloudflare_ip = request.headers.get("CF-Connecting-IP", "").strip()
+    if cloudflare_ip:
+        return cloudflare_ip
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",", 1)[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def rule_for(path: str) -> tuple[int, int] | None:
+    if path.startswith("/admin/"):
+        return _ADMIN_RULE
+    return _WINDOW_RULES.get(path)
+
+
+async def enforce_rate_limit(request: Request) -> JSONResponse | None:
+    rule = rule_for(request.url.path)
+    if not rule:
+        return None
+
+    limit, window = rule
+    key = f"tf:rl:v1:{request.url.path}:{client_ip(request)}"
+    try:
+        result = await _client().eval(_RATE_SCRIPT, 1, key, limit, window)
+    except Exception:
+        if _environment() == "production":
+            return JSONResponse(
+                {"detail": "Rate limiting service is temporarily unavailable."},
+                status_code=503,
+                headers={"Cache-Control": "no-store"},
+            )
+        return None
+
+    allowed = int(result[0])
+    remaining = max(0, int(result[1]))
+    retry_after = max(1, int(result[2]))
+    if allowed:
+        return None
+
+    return JSONResponse(
+        {"detail": "Too many requests. Please try again later."},
+        status_code=429,
+        headers={
+            "Retry-After": str(retry_after),
+            "X-RateLimit-Limit": str(limit),
+            "X-RateLimit-Remaining": str(remaining),
+            "Cache-Control": "no-store",
+        },
+    )
