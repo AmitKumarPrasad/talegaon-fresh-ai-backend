@@ -432,3 +432,41 @@ def test_ai_order_query_with_no_orders_gives_clear_next_step():
     assert response.status_code == 200
     assert "place an order first" in response.json()["reply"].lower()
     generate.assert_not_called()
+
+
+def test_ai_greeting_uses_deterministic_help_response():
+    from unittest.mock import patch
+
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch("app.openai_service.generate_mobile_reply") as generate:
+        response = client.post(
+            "/customers/me/ai/chat",
+            headers=headers,
+            json={"message": "Hi"},
+        )
+
+    assert response.status_code == 200
+    reply = response.json()["reply"]
+    assert "Talegaon Fresh" in reply
+    assert "order status" in reply.lower()
+    generate.assert_not_called()
+
+
+def test_ai_help_request_uses_deterministic_help_response():
+    from unittest.mock import patch
+
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch("app.openai_service.generate_mobile_reply") as generate:
+        response = client.post(
+            "/customers/me/ai/chat",
+            headers=headers,
+            json={"message": "What can you do?"},
+        )
+
+    assert response.status_code == 200
+    assert "tracking" in response.json()["reply"].lower()
+    generate.assert_not_called()
