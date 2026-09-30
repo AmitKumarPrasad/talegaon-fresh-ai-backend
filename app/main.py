@@ -307,6 +307,7 @@ async def admin_assign_delivery(order_id: int, payload: AssignDeliveryRequest, r
         )
     except Exception:
         logger.exception("Failed to notify delivery person for order_id=%s", order_id)
+    result.pop("delivery_token", None)
     return {**result, "delivery_link": delivery_link}
 
 
