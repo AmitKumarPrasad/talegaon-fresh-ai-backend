@@ -45,6 +45,10 @@ def _client() -> Redis:
     return _redis
 
 
+async def check_redis() -> None:
+    await _client().ping()
+
+
 def client_ip(request: Request) -> str:
     # Render's public edge provides CF-Connecting-IP. Fall back to the
     # first X-Forwarded-For value when Cloudflare's header is unavailable.
