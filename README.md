@@ -58,7 +58,7 @@ Customer orders always calculate totals from the current database price; the AI 
 
 ## Production deployment
 
-Build the image with Docker and provide production environment variables at runtime. The image runs Alembic migrations before starting FastAPI and listens on 0.0.0.0 using PORT.
+Build the image with Docker and provide production environment variables at runtime. By default, the image runs Alembic migrations before starting FastAPI and listens on 0.0.0.0 using PORT. Set `RUN_MIGRATIONS=false` when migrations are executed by a separate release/migration job (recommended for multi-instance deployments).
 
 Liveness endpoint: GET /health  
 Readiness endpoint: GET /ready
