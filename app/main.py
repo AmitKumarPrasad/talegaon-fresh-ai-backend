@@ -49,6 +49,7 @@ from app.state import get_state, reset_state
 from app.webhook_idempotency import claim_event
 from app.whatsapp import send_text_message
 from app.rate_limiter import enforce_rate_limit
+from app.whatsapp_webhook_security import verify_meta_signature
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -82,6 +83,7 @@ async def security_headers(request: Request, call_next):
 
 app.include_router(customer_router)
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN")
+WHATSAPP_APP_SECRET = os.getenv("WHATSAPP_APP_SECRET")
 validate_production_config()
 
 
@@ -108,7 +110,7 @@ def get_products() -> dict:
 @app.get("/webhook")
 async def verify_webhook(request: Request):
     params = request.query_params
-    if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == VERIFY_TOKEN:
+    if params.get("hub.mode") == "subscribe" and VERIFY_TOKEN and hmac.compare_digest(params.get("hub.verify_token") or "", VERIFY_TOKEN):
         return PlainTextResponse(params.get("hub.challenge") or "")
     return PlainTextResponse("Verification failed", status_code=403)
 
@@ -663,7 +665,15 @@ def handle_conversation(customer_id: str, message: str) -> str:
 
 @app.post("/webhook")
 async def receive_webhook(request: Request):
-    body = await request.json()
+    raw_body = await request.body()
+    signature = request.headers.get("X-Hub-Signature-256")
+    if not verify_meta_signature(raw_body, signature, WHATSAPP_APP_SECRET):
+        logger.warning("WhatsApp webhook rejected: invalid signature")
+        return PlainTextResponse("Invalid signature", status_code=403)
+    try:
+        body = json.loads(raw_body)
+    except json.JSONDecodeError:
+        return PlainTextResponse("Invalid JSON", status_code=400)
     customer_id, message, message_id = extract_message(body)
     if not customer_id or not message:
         return {"status": "ignored"}
