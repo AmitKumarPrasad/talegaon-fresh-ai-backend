@@ -434,6 +434,26 @@ def test_ai_order_query_with_no_orders_gives_clear_next_step():
     generate.assert_not_called()
 
 
+def test_ai_tracking_without_order_number_asks_for_order_id():
+    from unittest.mock import patch
+
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch("app.openai_service.generate_mobile_reply") as generate:
+        response = client.post(
+            "/customers/me/ai/chat",
+            headers=headers,
+            json={"message": "Track my order"},
+        )
+
+    assert response.status_code == 200
+    reply = response.json()["reply"].lower()
+    assert "order id" in reply
+    assert "my orders" in reply
+    generate.assert_not_called()
+
+
 def test_ai_greeting_uses_deterministic_help_response():
     from unittest.mock import patch
 
