@@ -73,9 +73,7 @@ def list_status_history(order_id: int, customer_id: str | None = None) -> list[d
         query = db.query(OrderStatusHistoryModel).filter(OrderStatusHistoryModel.order_id == order_id)
         if customer_id is not None:
             query = query.join(OrderModel, OrderModel.id == OrderStatusHistoryModel.order_id).filter(OrderModel.customer_id == customer_id)
-        rows = query
-                .order_by(OrderStatusHistoryModel.id.asc())
-                .all())
+        rows = query.order_by(OrderStatusHistoryModel.id.asc()).all()
         return [{
             "id": row.id,
             "from_status": row.from_status,
