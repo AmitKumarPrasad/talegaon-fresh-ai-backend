@@ -54,7 +54,17 @@ from app.whatsapp_webhook_security import verify_meta_signature
 
 load_dotenv()
 logger = logging.getLogger(__name__)
-app = FastAPI(title="Talegaon Fresh AI Agent", version="0.8.0")
+app = FastAPI(
+    title="Talegaon Fresh AI Agent API",
+    description=(
+        "Customer ordering, product catalog, order tracking, payment, seller, "
+        "inventory, pricing, delivery, and AI assistant APIs for Talegaon Fresh."
+    ),
+    version="0.9.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_allowed_origins(),
