@@ -110,7 +110,15 @@ def get_customer_order(order_id: int, customer_id: str):
     order = get_order(order_id)
     if not order or order["customer_id"] != customer_id:
         return None
-    return order
+    return {
+        "order_id": order["order_id"],
+        "status": order["status"],
+        "total": order["total"],
+        "address": order["address"],
+        "payment_method": order["payment_method"],
+        "payment_link_url": order["payment_link_url"],
+        "payment_verified_at": order["payment_verified_at"],
+    }
 
 
 def transition_order_status(order_id: int, status: str) -> bool:

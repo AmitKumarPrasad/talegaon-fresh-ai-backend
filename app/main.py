@@ -307,6 +307,7 @@ async def admin_assign_delivery(order_id: int, payload: AssignDeliveryRequest, r
         )
     except Exception:
         logger.exception("Failed to notify delivery person for order_id=%s", order_id)
+    result.pop("delivery_token", None)
     return {**result, "delivery_link": delivery_link}
 
 
@@ -820,10 +821,9 @@ async def razorpay_webhook(request: Request):
         )
 
     logger.info(
-        "Razorpay payment confirmed successfully order_id=%s amount_paise=%s payment_id=%s event_id=%s",
+        "Razorpay payment confirmed successfully order_id=%s amount_paise=%s event_id=%s",
         order_id,
         event["amount"],
-        event["payment_id"],
         event_id,
     )
     return {"status": "processed"}

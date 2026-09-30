@@ -26,4 +26,5 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_production_e2e_config.py'
       - run: python -m unittest discover -s tests -p 'test_mobile_ai_api.py'
       - run: python -m unittest discover -s tests -p 'test_mobile_ai_api.py'
+      - run: python -m unittest discover -s tests -p 'test_sensitive_data_audit.py'
       - run: docker build -t talegaon-fresh-ai-backend:ci .
