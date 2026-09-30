@@ -23,11 +23,17 @@ def update_payment(order_id: int, method: str) -> bool:
 
 
 def save_payment_link(order_id: int, payment_link_id: str, payment_link_url: str) -> bool:
-    from app.order_status import transition_order
-    def update(order):
+    db = SessionLocal()
+    try:
+        order = db.get(OrderModel, order_id)
+        if not order or order.status != "PAYMENT_PENDING":
+            return False
         order.razorpay_payment_link_id = payment_link_id
         order.payment_link_url = payment_link_url
-    return transition_order(order_id, "PAYMENT_PENDING", update)
+        db.commit()
+        return True
+    finally:
+        db.close()
 
 
 def confirm_upi_payment(order_id: int, payment_link_id: str, payment_id: str, event_id: str | None, amount_paise: int) -> bool:
