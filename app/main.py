@@ -48,6 +48,7 @@ from app.seller_notification import notify_seller
 from app.state import get_state, reset_state
 from app.webhook_idempotency import claim_event
 from app.whatsapp import send_text_message
+from app.rate_limiter import enforce_rate_limit
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -63,6 +64,9 @@ app.add_middleware(
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
+    rate_limit_response = await enforce_rate_limit(request)
+    if rate_limit_response is not None:
+        return rate_limit_response
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
