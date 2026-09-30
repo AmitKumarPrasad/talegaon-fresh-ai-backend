@@ -67,11 +67,13 @@ def get_allowed_transitions(status: str) -> set[str]:
     return set(ALLOWED_TRANSITIONS.get(status.upper(), set()))
 
 
-def list_status_history(order_id: int) -> list[dict]:
+def list_status_history(order_id: int, customer_id: str | None = None) -> list[dict]:
     db = SessionLocal()
     try:
-        rows = (db.query(OrderStatusHistoryModel)
-                .filter(OrderStatusHistoryModel.order_id == order_id)
+        query = db.query(OrderStatusHistoryModel).filter(OrderStatusHistoryModel.order_id == order_id)
+        if customer_id is not None:
+            query = query.join(OrderModel, OrderModel.id == OrderStatusHistoryModel.order_id).filter(OrderModel.customer_id == customer_id)
+        rows = query
                 .order_by(OrderStatusHistoryModel.id.asc())
                 .all())
         return [{
