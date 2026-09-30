@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, Field, field_validator
 import os
 
-from app.auth import current_customer, logout_customer, request_otp, verify_otp
+from app.auth import current_customer, logout_customer
+from app.pin_auth import register as register_pin, login as login_pin, refresh as refresh_pin, revoke as revoke_refresh
 from app.db import SessionLocal
 from app.models import AddressModel, CustomerModel, OrderItemModel, OrderModel, ProductModel
 from app.order_details import get_customer_order, save_payment_link
@@ -17,6 +18,23 @@ router = APIRouter()
 
 class OrderMessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
+
+
+class PinAuthRequest(BaseModel):
+    phone: str = Field(min_length=7, max_length=30)
+    pin: str = Field(min_length=6, max_length=6)
+    device_id: str = Field(min_length=16, max_length=200)
+    name: str | None = Field(default=None, max_length=100)
+
+    @field_validator("phone", "pin", "device_id", mode="before")
+    @classmethod
+    def _coerce_pin_fields(cls, value: object) -> object:
+        return str(value) if isinstance(value, int) else value
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=20, max_length=500)
+    device_id: str = Field(min_length=16, max_length=200)
 
 
 class OtpRequest(BaseModel):
@@ -100,16 +118,25 @@ def _order_dict(db, order: OrderModel) -> dict:
     }
 
 
-@router.post("/auth/request-otp")
-def auth_request(payload: OtpRequest, x_admin_token: str | None = Header(default=None)):
-    admin_token = os.getenv("ADMIN_API_TOKEN")
-    reveal_otp = bool(admin_token) and x_admin_token == admin_token
-    return request_otp(payload.phone, payload.name, reveal_otp=reveal_otp)
+@router.post("/auth/register")
+def auth_register(payload: PinAuthRequest):
+    return register_pin(payload.phone, payload.name or "Customer", payload.pin, payload.device_id)
 
 
-@router.post("/auth/verify-otp")
-def auth_verify(payload: OtpVerify):
-    return verify_otp(payload.phone, payload.otp, payload.name)
+@router.post("/auth/login")
+def auth_login(payload: PinAuthRequest):
+    return login_pin(payload.phone, payload.pin, payload.device_id)
+
+
+@router.post("/auth/refresh")
+def auth_refresh(payload: RefreshRequest):
+    return refresh_pin(payload.refresh_token, payload.device_id)
+
+
+@router.post("/auth/logout-session")
+def auth_logout_session(payload: RefreshRequest):
+    revoke_refresh(payload.refresh_token)
+    return {"status": "logged_out"}
 
 
 @router.post("/auth/logout")
