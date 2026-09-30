@@ -21,6 +21,7 @@ class ProductionE2EConfigTests(unittest.TestCase):
                 "ADMIN_API_TOKEN",
                 "DATABASE_URL",
                 "JWT_SECRET",
+                "REDIS_URL",
                 "MSG91_AUTHKEY",
                 "MSG91_TEMPLATE_ID",
             )
@@ -42,6 +43,7 @@ class ProductionE2EConfigTests(unittest.TestCase):
         os.environ["JWT_SECRET"] = (
             "configured-strong-secret-12345678901234567890"
         )
+        os.environ["REDIS_URL"] = "redis://localhost:6379"
         os.environ["MSG91_AUTHKEY"] = "msg91-auth-key"
         os.environ["MSG91_TEMPLATE_ID"] = "template-123"
 
