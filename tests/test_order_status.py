@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from app.order_status import get_allowed_transitions, transition_order
+from app.order_status import get_allowed_transitions, list_status_history, transition_order
 
 
 class OrderStatusLifecycleTests(unittest.TestCase):
@@ -44,6 +44,17 @@ class OrderStatusLifecycleTests(unittest.TestCase):
         self.assertTrue(transition_order(101, "PACKING"))
         self.assertEqual(order.status, "PACKING")
         db.commit.assert_called_once()
+        db.add.assert_called_once()
+
+
+    @patch("app.order_status.SessionLocal")
+    def test_status_history_is_read(self, session_local):
+        db = session_local.return_value
+        query = db.query.return_value
+        query.filter.return_value = query
+        query.order_by.return_value = query
+        query.all.return_value = [type("History", (), {"id": 1, "from_status": "CONFIRMED", "to_status": "PACKING", "created_at": None})()]
+        self.assertEqual(list_status_history(101), [{"id": 1, "from_status": "CONFIRMED", "to_status": "PACKING", "created_at": None}])
 
     @patch("app.order_status.SessionLocal")
     def test_invalid_transition_is_rejected(self, session_local):
