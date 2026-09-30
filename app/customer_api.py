@@ -117,6 +117,9 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
             "my order no",
             "my order number",
             "what is my order",
+            "what is my latest order",
+            "show my latest order",
+            "latest order number",
         )
     )
     asks_specific_order = order_match is not None and (
