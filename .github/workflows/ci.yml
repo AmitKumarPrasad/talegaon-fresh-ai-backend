@@ -30,4 +30,5 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_delivery_token_security.py'
       - run: python -m unittest discover -s tests -p 'test_whatsapp_webhook_security.py'
       - run: python -m unittest discover -s tests -p 'test_payment_replay_hardening.py'
+      - run: python -m unittest discover -s tests -p 'test_customer_idor_audit.py'
       - run: docker build -t talegaon-fresh-ai-backend:ci .
