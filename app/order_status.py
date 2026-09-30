@@ -1,5 +1,5 @@
 from app.db import SessionLocal
-from app.models import OrderItemModel, OrderModel, ProductModel
+from app.models import OrderItemModel, OrderModel, OrderStatusHistoryModel, ProductModel
 
 ORDER_STATUSES = {
     "PENDING",
@@ -54,7 +54,9 @@ def transition_order(order_id: int, new_status: str) -> bool:
                 if product:
                     product.in_stock = product.stock_quantity > 0
             order.stock_reserved = False
+        previous_status = order.status
         order.status = new_status
+        db.add(OrderStatusHistoryModel(order_id=order.id, from_status=previous_status, to_status=new_status))
         db.commit()
         return True
     finally:
@@ -63,3 +65,20 @@ def transition_order(order_id: int, new_status: str) -> bool:
 
 def get_allowed_transitions(status: str) -> set[str]:
     return set(ALLOWED_TRANSITIONS.get(status.upper(), set()))
+
+
+def list_status_history(order_id: int) -> list[dict]:
+    db = SessionLocal()
+    try:
+        rows = (db.query(OrderStatusHistoryModel)
+                .filter(OrderStatusHistoryModel.order_id == order_id)
+                .order_by(OrderStatusHistoryModel.id.asc())
+                .all())
+        return [{
+            "id": row.id,
+            "from_status": row.from_status,
+            "to_status": row.to_status,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        } for row in rows]
+    finally:
+        db.close()
