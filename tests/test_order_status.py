@@ -52,6 +52,7 @@ class OrderStatusLifecycleTests(unittest.TestCase):
         db = session_local.return_value
         query = db.query.return_value
         query.filter.return_value = query
+        query.join.return_value = query
         query.order_by.return_value = query
         query.all.return_value = [type("History", (), {"id": 1, "from_status": "CONFIRMED", "to_status": "PACKING", "created_at": None})()]
         self.assertEqual(list_status_history(101), [{"id": 1, "from_status": "CONFIRMED", "to_status": "PACKING", "created_at": None}])
