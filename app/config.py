@@ -6,6 +6,8 @@ WhatsApp and Razorpay integrations remain in the codebase for later use but
 are not required to start the mobile-focused production service.
 """
 import os
+from urllib.parse import urlparse
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -33,13 +35,30 @@ OPTIONAL_PRODUCTION_VARS = (
 
 
 def get_cors_allowed_origins() -> list[str]:
-    """Return allowed CORS origins from CORS_ALLOWED_ORIGINS (comma-separated), default '*'."""
+    """Return validated CORS origins from CORS_ALLOWED_ORIGINS."""
     environment = os.getenv("ENVIRONMENT", "development").lower()
     default = "" if environment == "production" else "*"
     raw = os.getenv("CORS_ALLOWED_ORIGINS", default)
-    origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
-    if environment == "production" and "*" in origins:
-        raise RuntimeError("CORS_ALLOWED_ORIGINS must not contain '*' in production.")
+    origins = [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
+
+    if environment == "production":
+        if "*" in origins:
+            raise RuntimeError("CORS_ALLOWED_ORIGINS must not contain '*' in production.")
+        for origin in origins:
+            parsed = urlparse(origin)
+            if parsed.scheme != "https" or not parsed.netloc:
+                raise RuntimeError(
+                    "Production CORS_ALLOWED_ORIGINS must contain only explicit HTTPS origins."
+                )
+            if parsed.username or parsed.password or parsed.query or parsed.fragment:
+                raise RuntimeError(
+                    "Production CORS origins must not contain credentials, query parameters, or fragments."
+                )
+            if parsed.path not in ("", "/"):
+                raise RuntimeError(
+                    "Production CORS origins must not contain URL paths."
+                )
+
     return origins
 
 
