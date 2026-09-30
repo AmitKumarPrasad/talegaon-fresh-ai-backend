@@ -52,7 +52,7 @@ class MobileAiApiTests(unittest.TestCase):
         order_id = order.id
         db.close()
         try:
-            with patch("app.customer_api.generate_mobile_reply") as fallback:
+            with patch("app.openai_service.generate_mobile_reply") as fallback:
                 number_reply = _mobile_ai_reply("What is my order number?", "918888888888")
                 status_reply = _mobile_ai_reply(f"Track order {order_id}", "918888888888")
             self.assertIn(f"Order #{order_id}", number_reply)
