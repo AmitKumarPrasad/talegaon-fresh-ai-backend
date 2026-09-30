@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+from sqlalchemy.exc import IntegrityError
+
 from app.db import SessionLocal
 from app.models import OrderModel
 
@@ -59,7 +61,7 @@ def confirm_upi_payment(
 ) -> bool:
     db = SessionLocal()
     try:
-        order = db.get(OrderModel, order_id)
+        order = db.query(OrderModel).filter(OrderModel.id == order_id).with_for_update().first()
         if not order or order.payment_method != "UPI":
             return False
         expected_amount = int(round(order.total * 100))
@@ -67,14 +69,18 @@ def confirm_upi_payment(
             return False
         if order.razorpay_payment_link_id and order.razorpay_payment_link_id != payment_link_id:
             return False
-        if order.razorpay_payment_id == payment_id and order.status == "CONFIRMED":
+        if order.status == "CONFIRMED" and order.razorpay_payment_id:
             return False
         order.razorpay_payment_link_id = payment_link_id
         order.razorpay_payment_id = payment_id
         order.razorpay_event_id = event_id
         order.payment_verified_at = datetime.now(timezone.utc)
         order.status = "CONFIRMED"
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            return False
         return True
     finally:
         db.close()
