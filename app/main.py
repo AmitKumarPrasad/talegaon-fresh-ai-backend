@@ -3,11 +3,12 @@ import logging
 import os
 import re
 import hmac
+import uuid
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.admin_orders import get_admin_order, list_orders
@@ -74,12 +75,20 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def security_headers(request: Request, call_next):
-    rate_limit_response = await enforce_rate_limit(request)
-    if rate_limit_response is not None:
-        return rate_limit_response
-    response = await call_next(request)
+def _request_id(request: Request) -> str:
+    candidate = request.headers.get("X-Request-ID", "").strip()
+    if candidate and len(candidate) <= 64 and all(
+        char.isalnum() or char in "._-" for char in candidate
+    ):
+        request.state.request_id = candidate
+        return candidate
+    request_id = uuid.uuid4().hex
+    request.state.request_id = request_id
+    return request_id
+
+
+def _apply_security_headers(request: Request, response):
+    response.headers["X-Request-ID"] = request.state.request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -90,6 +99,28 @@ async def security_headers(request: Request, call_next):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
     return response
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    request_id = _request_id(request)
+    try:
+        rate_limit_response = await enforce_rate_limit(request)
+        if rate_limit_response is not None:
+            return _apply_security_headers(request, rate_limit_response)
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            "Unhandled request exception request_id=%s method=%s path=%s",
+            request_id,
+            request.method,
+            request.url.path,
+        )
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error", "request_id": request_id},
+        )
+    return _apply_security_headers(request, response)
 
 
 app.include_router(customer_router)
