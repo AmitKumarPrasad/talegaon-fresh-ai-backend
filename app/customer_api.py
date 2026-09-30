@@ -107,6 +107,10 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
             "track order",
             "where is my order",
             "status of my order",
+            "my order status",
+            "check my order",
+            "check order",
+            "track my order",
         )
     )
     asks_order_number = any(
@@ -120,6 +124,10 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
             "what is my latest order",
             "show my latest order",
             "latest order number",
+            "show my order",
+            "show my orders",
+            "my orders",
+            "order details",
         )
     )
     asks_specific_order = order_match is not None and (
@@ -164,6 +172,12 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
             return (
                 "I couldn't find that order under your account. "
                 "Please check the Order ID shown in My Orders."
+            )
+
+        if asks_status or asks_order_number:
+            return (
+                "I couldn't find any orders under your account yet. "
+                "Please place an order first, or share the Order ID from My Orders."
             )
     finally:
         db.close()
