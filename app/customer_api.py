@@ -134,6 +134,10 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
         "order" in normalized or asks_status
     )
 
+    basic_intents = {"hi", "hello", "hey", "hii", "good morning", "good afternoon", "good evening", "help", "what can you do", "how can you help"}
+    if normalized in basic_intents:
+        return ("Hi! 👋 I can help with your Talegaon Fresh orders. You can ask for your latest order, order status, tracking, or order details.")
+
     db = SessionLocal()
     try:
         order = None
