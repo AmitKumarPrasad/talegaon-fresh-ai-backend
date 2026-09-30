@@ -15,12 +15,12 @@ client = TestClient(app)
 
 
 def auth():
-    registered = client.post("/auth/register", json={
-        "phone": "918888888888",
-        "name": "AI Test User",
-        "pin": "123456",
-        "device_id": "test-device-918888888888",
-    })
+    payload = {"phone": "918888888888", "name": "AI Test User", "pin": "123456", "device_id": "test-device-918888888888"}
+    registered = client.post("/auth/register", json=payload)
+    if registered.status_code == 409:
+        logged_in = client.post("/auth/login", json=payload)
+        assert logged_in.status_code == 200
+        return logged_in.json()["access_token"]
     assert registered.status_code == 200
     return registered.json()["access_token"]
 
