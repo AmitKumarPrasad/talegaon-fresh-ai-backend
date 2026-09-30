@@ -1,15 +1,11 @@
+from collections.abc import Callable
+
 from app.db import SessionLocal
 from app.models import OrderItemModel, OrderModel, OrderStatusHistoryModel, ProductModel
 
 ORDER_STATUSES = {
-    "PENDING",
-    "ADDRESS_CONFIRMED",
-    "PAYMENT_PENDING",
-    "CONFIRMED",
-    "PACKING",
-    "OUT_FOR_DELIVERY",
-    "DELIVERED",
-    "CANCELLED",
+    "PENDING", "ADDRESS_CONFIRMED", "PAYMENT_PENDING", "CONFIRMED",
+    "PACKING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED",
 }
 
 ALLOWED_TRANSITIONS = {
@@ -24,11 +20,10 @@ ALLOWED_TRANSITIONS = {
 }
 
 
-def transition_order(order_id: int, new_status: str) -> bool:
+def transition_order(order_id: int, new_status: str, updater: Callable | None = None) -> bool:
     new_status = new_status.upper()
     if new_status not in ORDER_STATUSES:
         return False
-
     db = SessionLocal()
     try:
         order = db.get(OrderModel, order_id)
@@ -39,14 +34,10 @@ def transition_order(order_id: int, new_status: str) -> bool:
         if new_status == "CANCELLED" and order.stock_reserved:
             items = db.query(OrderItemModel).filter(OrderItemModel.order_id == order.id).all()
             for item in items:
-                updated = (
-                    db.query(ProductModel)
-                    .filter(ProductModel.name == item.product_name)
-                    .update(
-                        {ProductModel.stock_quantity: ProductModel.stock_quantity + int(item.quantity)},
-                        synchronize_session=False,
-                    )
-                )
+                updated = (db.query(ProductModel).filter(ProductModel.name == item.product_name).update(
+                    {ProductModel.stock_quantity: ProductModel.stock_quantity + int(item.quantity)},
+                    synchronize_session=False,
+                ))
                 if updated != 1:
                     db.rollback()
                     return False
@@ -55,8 +46,12 @@ def transition_order(order_id: int, new_status: str) -> bool:
                     product.in_stock = product.stock_quantity > 0
             order.stock_reserved = False
         previous_status = order.status
+        if updater is not None:
+            updater(order)
         order.status = new_status
-        db.add(OrderStatusHistoryModel(order_id=order.id, from_status=previous_status, to_status=new_status))
+        db.add(OrderStatusHistoryModel(
+            order_id=order.id, from_status=previous_status, to_status=new_status
+        ))
         db.commit()
         return True
     finally:
