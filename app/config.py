@@ -61,6 +61,12 @@ def validate_production_config() -> None:
     ):
         raise RuntimeError("Production DATABASE_URL must use PostgreSQL.")
 
+    redis_url = os.getenv("REDIS_URL", "")
+    if not redis_url.startswith(("redis://", "rediss://")):
+        raise RuntimeError(
+            "Production REDIS_URL must use Redis (redis:// or rediss://)."
+        )
+
     jwt_secret = os.getenv("JWT_SECRET", "")
     if len(jwt_secret) < 32 or jwt_secret == "development-jwt-secret-change-me":
         raise RuntimeError(

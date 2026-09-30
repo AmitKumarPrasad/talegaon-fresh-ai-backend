@@ -6,6 +6,7 @@ Mobile-first backend for Talegaon Fresh, with optional AI assistance. WhatsApp a
 - Python
 - FastAPI
 - PostgreSQL
+- Redis
 - OpenAI API (optional AI assistant)
 
 ## Local setup
@@ -68,10 +69,11 @@ Set `ENVIRONMENT=production` in production.
 These variables are required for the mobile production service:
 
 - `DATABASE_URL` using PostgreSQL
+- `REDIS_URL` using `redis://` or `rediss://` for distributed rate limiting
 - `ADMIN_API_TOKEN`
 - `JWT_SECRET` — unique random secret, at least 32 characters; keep it stable across deployments
 
-The service rejects SQLite and non-PostgreSQL production database URLs.
+The service rejects SQLite and non-PostgreSQL production database URLs. Production also rejects non-Redis `REDIS_URL` values.
 
 ### Optional AI environment
 
@@ -112,3 +114,4 @@ The current production path is:
 The core flow includes authentication, addresses, cart, product catalog, order creation, order history/details, server-authoritative pricing, inventory, and admin order operations.
 
 AI is an optional layer on top of the core commerce flow; it must not determine prices, stock, payment results, or authoritative order totals.
+

@@ -32,6 +32,17 @@ class ProductionConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "JWT_SECRET"):
                 validate_production_config()
 
+    def test_production_rejects_invalid_redis_url(self):
+        env = {
+            "ENVIRONMENT": "production",
+            "ADMIN_API_TOKEN": "admin",
+            "DATABASE_URL": "postgresql://user:pass@localhost/db",
+            "JWT_SECRET": "configured-strong-secret-12345678901234567890",
+            "REDIS_URL": "https://redis.example.com",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "REDIS_URL"):
+                validate_production_config()
 
     def test_production_cors_does_not_default_to_wildcard(self):
         with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=True):
