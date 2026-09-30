@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.db import Base, engine
 from app.main import app
-from app.models import OrderModel, ProductModel
+from app.models import OrderModel, OrderStatusHistoryModel, ProductModel
 
 Base.metadata.create_all(bind=engine)
 
@@ -120,6 +120,50 @@ def test_cart_and_orders():
     assert orders.status_code == 200
     assert orders.json()["orders"][0]["order_id"] == order.json()["order_id"]
 
+
+
+def test_checkout_records_payment_status_transition_history():
+    from app.db import SessionLocal
+
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    order = client.post("/customers/me/orders", headers=headers, json={
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 999, "quantity": 1}],
+        "address": "Main Road, Talegaon, 410507",
+        "payment_method": "COD"
+    })
+    assert order.status_code == 200
+    order_id = order.json()["order_id"]
+
+    db = SessionLocal()
+    history = (
+        db.query(OrderStatusHistoryModel)
+        .filter(OrderStatusHistoryModel.order_id == order_id)
+        .order_by(OrderStatusHistoryModel.id)
+        .all()
+    )
+    assert [(row.from_status, row.to_status) for row in history] == [("PENDING", "CONFIRMED")]
+    db.close()
+
+
+def test_upi_checkout_records_payment_pending_transition_history():
+    from app.db import SessionLocal
+
+    _reset_tomato_stock()
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    order = client.post("/customers/me/orders", headers=headers, json={
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 999, "quantity": 1}],
+        "address": "Main Road, Talegaon, 410507",
+        "payment_method": "UPI"
+    })
+    assert order.status_code == 200
+    order_id = order.json()["order_id"]
+
+    db = SessionLocal()
+    history = db.query(OrderStatusHistoryModel).filter(OrderStatusHistoryModel.order_id == order_id).all()
+    assert [(row.from_status, row.to_status) for row in history] == [("PENDING", "PAYMENT_PENDING")]
+    db.close()
 
 
 def test_customer_upi_payment_link_is_created_and_reused():
