@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.db import Base, engine
 from app.main import app
-from app.models import ProductModel
+from app.models import OrderModel, ProductModel
 
 Base.metadata.create_all(bind=engine)
 
@@ -292,3 +292,61 @@ def test_failed_order_rolls_back_stock_reservation():
     assert product.in_stock is True
     db.close()
 
+
+
+def test_checkout_notifies_seller_after_order_commit():
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    from app.db import SessionLocal
+    db = SessionLocal()
+    product = ProductModel(
+        name="Notification Test Tomato",
+        unit="1 kg",
+        price=50.0,
+        in_stock=True,
+        stock_quantity=20,
+    )
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    product_id = product.id
+    db.close()
+
+    payload = {
+        "items": [{"name": "Notification Test Tomato", "unit": "1 kg", "price": 50.0, "quantity": 2}],
+        "address": "Talegaon, Pune, 410507",
+        "payment_method": "COD",
+    }
+
+    body = None
+    try:
+        with patch("app.customer_api.notify_seller", return_value={"status": "sent"}) as notify:
+            response = client.post("/customers/me/orders", headers=headers, json=payload)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "CONFIRMED"
+        assert body["total"] == 100.0
+        notify.assert_called_once()
+        call = notify.call_args.kwargs
+        assert call["order_id"] == body["id"]
+        assert call["total"] == 100.0
+        assert call["payment_method"] == "COD"
+
+        db = SessionLocal()
+        created = db.get(OrderModel, body["id"])
+        assert created is not None
+        assert created.status == "CONFIRMED"
+        assert created.total == 100.0
+        db.close()
+    finally:
+        db = SessionLocal()
+        if body is not None and body.get("id") is not None:
+            created = db.get(OrderModel, body["id"])
+            if created:
+                db.delete(created)
+        test_product = db.get(ProductModel, product_id)
+        if test_product:
+            db.delete(test_product)
+        db.commit()
+        db.close()
