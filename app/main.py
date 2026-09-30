@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import hmac
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -55,9 +56,26 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_allowed_origins(),
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Admin-Token"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(self)"
+    if os.getenv("ENVIRONMENT", "development").lower() == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    if request.url.path.startswith("/auth/") or request.url.path.startswith("/customers/me"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
+
 app.include_router(customer_router)
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN")
 validate_production_config()
@@ -122,7 +140,7 @@ class BulkPriceUpdateRequest(BaseModel):
 
 def _admin_authorized(request: Request) -> bool:
     configured = os.getenv("ADMIN_API_TOKEN")
-    return bool(configured) and request.headers.get("X-Admin-Token") == configured
+    return bool(configured) and hmac.compare_digest(request.headers.get("X-Admin-Token", ""), configured)
 
 
 @app.get("/admin/dashboard")

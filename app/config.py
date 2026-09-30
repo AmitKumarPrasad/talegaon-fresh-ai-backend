@@ -32,9 +32,13 @@ OPTIONAL_PRODUCTION_VARS = (
 
 def get_cors_allowed_origins() -> list[str]:
     """Return allowed CORS origins from CORS_ALLOWED_ORIGINS (comma-separated), default '*'."""
-    raw = os.getenv("CORS_ALLOWED_ORIGINS", "*")
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    default = "" if environment == "production" else "*"
+    raw = os.getenv("CORS_ALLOWED_ORIGINS", default)
     origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
-    return origins or ["*"]
+    if environment == "production" and "*" in origins:
+        raise RuntimeError("CORS_ALLOWED_ORIGINS must not contain '*' in production.")
+    return origins
 
 
 def validate_production_config() -> None:
