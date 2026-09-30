@@ -12,6 +12,7 @@ from app.main import app
 from app.customer_api import _mobile_ai_reply
 from app.db import SessionLocal
 from app.models import OrderModel
+from app.state import get_state
 
 Base.metadata.create_all(bind=engine)
 client = TestClient(app)
@@ -67,6 +68,7 @@ class MobileAiApiTests(unittest.TestCase):
                 db.delete(row)
                 db.commit()
             db.close()
+
     def test_order_status_query_uses_authoritative_customer_order(self):
         token = auth()
         headers = {"Authorization": f"Bearer {token}"}
@@ -75,6 +77,40 @@ class MobileAiApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["reply"], "authoritative")
         reply.assert_called_once_with("What is my order number?", "918888888888")
+
+    def test_tracking_follow_up_order_id_uses_persistent_state(self):
+        db = SessionLocal()
+        order = OrderModel(
+            customer_id="918888888888",
+            status="OUT_FOR_DELIVERY",
+            total=275.0,
+            address="Talegaon, Pune, 410507",
+            payment_method="COD",
+        )
+        db.add(order)
+        db.commit()
+        db.refresh(order)
+        order_id = order.id
+        db.close()
+        try:
+            first = _mobile_ai_reply("Track my order", "918888888888")
+            self.assertIn("Please share the Order ID", first)
+            self.assertTrue(get_state("918888888888").status_order_lookup)
+
+            with patch("app.openai_service.generate_mobile_reply") as fallback:
+                second = _mobile_ai_reply(str(order_id), "918888888888")
+
+            self.assertIn(f"Order #{order_id}", second)
+            self.assertIn("Out For Delivery", second)
+            self.assertFalse(get_state("918888888888").status_order_lookup)
+            fallback.assert_not_called()
+        finally:
+            db = SessionLocal()
+            row = db.get(OrderModel, order_id)
+            if row:
+                db.delete(row)
+                db.commit()
+            db.close()
 
 
 if __name__ == "__main__":
