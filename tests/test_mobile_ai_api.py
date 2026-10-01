@@ -19,7 +19,7 @@ client = TestClient(app)
 
 
 def auth():
-    payload = {"phone": "918888888888", "name": "AI Test User", "pin": "123456", "device_id": "test-device-918888888888"}
+    payload = {"phone": "8888888888", "name": "AI Test User", "pin": "123456", "device_id": "test-device-8888888888"}
     registered = client.post("/auth/register", json=payload)
     if registered.status_code == 409:
         logged_in = client.post("/auth/login", json=payload)
@@ -41,12 +41,12 @@ class MobileAiApiTests(unittest.TestCase):
             response = client.post("/customers/me/ai/chat", headers=headers, json={"message": "How much are tomatoes?"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["reply"], "Please check the Products screen for live prices and stock.")
-        reply.assert_called_once_with("How much are tomatoes?", "918888888888")
+        reply.assert_called_once_with("How much are tomatoes?", "8888888888")
 
     def test_order_number_and_tracking_use_customer_order(self):
         token = auth()
         db = SessionLocal()
-        order = OrderModel(customer_id="918888888888", status="OUT_FOR_DELIVERY", total=349.0, address="Talegaon, Pune, 410507", payment_method="COD")
+        order = OrderModel(customer_id="8888888888", status="OUT_FOR_DELIVERY", total=349.0, address="Talegaon, Pune, 410507", payment_method="COD")
         db.add(order)
         db.commit()
         db.refresh(order)
@@ -54,8 +54,8 @@ class MobileAiApiTests(unittest.TestCase):
         db.close()
         try:
             with patch("app.openai_service.generate_mobile_reply") as fallback:
-                number_reply = _mobile_ai_reply("What is my order number?", "918888888888")
-                status_reply = _mobile_ai_reply(f"Track order {order_id}", "918888888888")
+                number_reply = _mobile_ai_reply("What is my order number?", "8888888888")
+                status_reply = _mobile_ai_reply(f"Track order {order_id}", "8888888888")
             self.assertIn(f"Order #{order_id}", number_reply)
             self.assertIn("Out For Delivery", number_reply)
             self.assertIn(f"Order #{order_id}", status_reply)
@@ -76,12 +76,12 @@ class MobileAiApiTests(unittest.TestCase):
             response = client.post("/customers/me/ai/chat", headers=headers, json={"message": "What is my order number?"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["reply"], "authoritative")
-        reply.assert_called_once_with("What is my order number?", "918888888888")
+        reply.assert_called_once_with("What is my order number?", "8888888888")
 
     def test_tracking_follow_up_order_id_uses_persistent_state(self):
         db = SessionLocal()
         order = OrderModel(
-            customer_id="918888888888",
+            customer_id="8888888888",
             status="OUT_FOR_DELIVERY",
             total=275.0,
             address="Talegaon, Pune, 410507",
@@ -93,16 +93,16 @@ class MobileAiApiTests(unittest.TestCase):
         order_id = order.id
         db.close()
         try:
-            first = _mobile_ai_reply("Track my order", "918888888888")
+            first = _mobile_ai_reply("Track my order", "8888888888")
             self.assertIn("Please share the Order ID", first)
-            self.assertTrue(get_state("918888888888").status_order_lookup)
+            self.assertTrue(get_state("8888888888").status_order_lookup)
 
             with patch("app.openai_service.generate_mobile_reply") as fallback:
-                second = _mobile_ai_reply(str(order_id), "918888888888")
+                second = _mobile_ai_reply(str(order_id), "8888888888")
 
             self.assertIn(f"Order #{order_id}", second)
             self.assertIn("Out For Delivery", second)
-            self.assertFalse(get_state("918888888888").status_order_lookup)
+            self.assertFalse(get_state("8888888888").status_order_lookup)
             fallback.assert_not_called()
         finally:
             db = SessionLocal()
