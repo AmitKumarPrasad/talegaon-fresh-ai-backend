@@ -19,6 +19,7 @@ class PersistentConversationStateTests(unittest.TestCase):
         db = session_local.return_value
         db.get.return_value = None
         state = ConversationState(
+            customer_id="919999999999",
             step="address",
             cart=[{"product": "Tomato", "quantity": 2}],
             pending_order_id=101,

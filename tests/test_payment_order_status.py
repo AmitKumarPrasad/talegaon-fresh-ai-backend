@@ -36,7 +36,7 @@ class PaymentOrderStatusTests(unittest.TestCase):
     def test_confirmed_payment_changes_order_status_to_confirmed(self, session_local):
         db = session_local.return_value
         order = self._order()
-        db.get.return_value = order
+        db.query.return_value.filter.return_value.with_for_update.return_value.first.return_value = order
 
         confirmed = confirm_upi_payment(
             order_id=1,

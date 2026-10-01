@@ -31,4 +31,7 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_request_security.py'
       - run: python -m unittest discover -s tests -p 'test_payment_replay_hardening.py'
       - run: python -m unittest discover -s tests -p 'test_customer_idor_audit.py'
+      - run: python -m unittest discover -s tests -p 'test_payment_order_status.py'
+      - run: python -m unittest discover -s tests -p 'test_persistent_state.py'
+      - run: python -m pytest tests/test_readiness.py
       - run: docker build -t talegaon-fresh-ai-backend:ci .

@@ -3,6 +3,8 @@ uvicorn[standard]
 openai
 python-dotenv
 requests
+pytest
+pytest-asyncio
 SQLAlchemy
 psycopg2-binary
 alembic
