@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 from app.db import Base, SessionLocal
 from app.models import CustomerModel
+from app.phone_utils import is_valid_indian_mobile
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -67,7 +68,9 @@ def _issue(db, customer: CustomerModel, device_id: str) -> dict:
     return {"access_token": _token(customer.phone, customer.name, customer.auth_version), "refresh_token": refresh, "token_type": "bearer", "expires_in": ACCESS_TOKEN_MINUTES * 60, "customer": {"phone": customer.phone, "name": customer.name}}
 
 def register(phone: str, name: str, pin: str, device_id: str) -> dict:
-    if not phone.strip() or not device_id or len(device_id) < 16 or len(device_id) > 200: raise HTTPException(400, "Invalid registration data")
+    phone = phone.strip()
+    if not is_valid_indian_mobile(phone): raise HTTPException(400, "Enter a valid 10-digit Indian mobile number")
+    if not device_id or len(device_id) < 16 or len(device_id) > 200: raise HTTPException(400, "Invalid registration data")
     if not pin.isdigit() or len(pin) != 6: raise HTTPException(400, "PIN must be exactly 6 digits")
     db=SessionLocal()
     try:
@@ -81,6 +84,8 @@ def register(phone: str, name: str, pin: str, device_id: str) -> dict:
     finally: db.close()
 
 def login(phone: str, pin: str, device_id: str) -> dict:
+    phone = phone.strip()
+    if not is_valid_indian_mobile(phone): raise HTTPException(400, "Enter a valid 10-digit Indian mobile number")
     db=SessionLocal()
     try:
         customer=db.get(CustomerModel, phone.strip())

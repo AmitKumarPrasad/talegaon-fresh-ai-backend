@@ -4,6 +4,7 @@ import os
 import re
 import hmac
 import uuid
+from datetime import date
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -192,10 +193,17 @@ def _admin_authorized(request: Request) -> bool:
 
 
 @app.get("/admin/dashboard")
-async def admin_dashboard(request: Request):
+async def admin_dashboard(
+    request: Request,
+    start_date: date | None = None,
+    end_date: date | None = None,
+):
     if not _admin_authorized(request):
         return PlainTextResponse("Unauthorized", status_code=401)
-    return get_dashboard_summary()
+    try:
+        return get_dashboard_summary(start_date=start_date, end_date=end_date)
+    except ValueError as exc:
+        return PlainTextResponse(str(exc), status_code=400)
 
 
 @app.get("/admin/inventory")
@@ -855,6 +863,20 @@ async def razorpay_webhook(request: Request):
     claim_event("razorpay", event_id)
 
     customer_id = order["customer_id"]
+
+    try:
+        notify_seller(
+            order_id,
+            customer_id,
+            order["total"],
+            order["address"] or "",
+            "UPI CONFIRMED",
+        )
+    except Exception:
+        logger.exception(
+            "Payment confirmed but seller notification failed order_id=%s",
+            order_id,
+        )
 
     try:
         notify_seller(

@@ -15,6 +15,7 @@ from app.order_status import get_allowed_transitions, list_status_history
 from app.delivery_service import add_message_by_customer, get_tracking_info, list_messages_for_customer
 from app.seller_notification import notify_seller
 from app.state import get_state
+from app.phone_utils import is_valid_indian_mobile
 
 router = APIRouter()
 
@@ -33,6 +34,14 @@ class PinAuthRequest(BaseModel):
     @classmethod
     def _coerce_pin_fields(cls, value: object) -> object:
         return str(value) if isinstance(value, int) else value
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_phone(cls, value: str) -> str:
+        value = value.strip()
+        if not is_valid_indian_mobile(value):
+            raise ValueError("Enter a valid 10-digit Indian mobile number")
+        return value
 
 
 class RefreshRequest(BaseModel):
