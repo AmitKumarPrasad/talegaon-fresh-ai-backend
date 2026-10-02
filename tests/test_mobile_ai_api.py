@@ -11,7 +11,7 @@ from app.db import Base, engine
 from app.main import app
 from app.customer_api import _mobile_ai_reply
 from app.db import SessionLocal
-from app.models import OrderModel
+from app.models import OrderModel, ProductModel
 from app.state import get_state
 
 Base.metadata.create_all(bind=engine)
