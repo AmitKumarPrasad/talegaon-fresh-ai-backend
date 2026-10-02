@@ -3,9 +3,11 @@ import subprocess
 import sys
 
 from sqlalchemy import create_engine, text
+import pytest
 
 
-def test_catalog_migration_preserves_existing_business_data(tmp_path):
+@pytest.mark.parametrize("target, expected_count", [("0015", 44), ("head", 54)])
+def test_catalog_migration_preserves_existing_business_data(tmp_path, target, expected_count):
     url = f"sqlite:///{tmp_path / 'catalog.db'}"
     env = {**os.environ, "DATABASE_URL": url}
 
@@ -21,10 +23,10 @@ def test_catalog_migration_preserves_existing_business_data(tmp_path):
         db.execute(text("UPDATE products SET price=61, stock_quantity=7, "
                         "image_url='https://images.bigbasket.com/p/dairy/old/260x260-c0bab6ba.jpg' "
                         "WHERE name='Amul Taaza Milk'"))
-    migrate("head")
-    migrate("head")
+    migrate(target)
+    migrate(target)
     with engine.connect() as db:
-        assert db.execute(text("SELECT count(*) FROM products")).scalar() == 44
+        assert db.execute(text("SELECT count(*) FROM products")).scalar() == expected_count
         butter = db.execute(text("SELECT price, stock_quantity, in_stock, image_url "
                                  "FROM products WHERE name='Amul Butter'")).one()
         assert tuple(butter) == (72, 0, 0, "https://example.com/butter.jpg")
