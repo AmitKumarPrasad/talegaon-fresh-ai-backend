@@ -5,32 +5,44 @@ from app.models import OrderModel, ProductModel
 
 ACTIVE_STATUSES = {"PENDING", "ADDRESS_CONFIRMED", "PAYMENT_PENDING", "CONFIRMED", "PACKING", "OUT_FOR_DELIVERY"}
 LOW_STOCK_THRESHOLD = 10
+BUSINESS_TIMEZONE = timezone(timedelta(hours=5, minutes=30))
+
+
+def _is_revenue(order: OrderModel) -> bool:
+    if order.status in {"CANCELLED", "PENDING", "ADDRESS_CONFIRMED", "PAYMENT_PENDING"}:
+        return False
+    return (
+        order.payment_method == "UPI" and order.payment_verified_at is not None
+    ) or (order.payment_method == "COD" and order.status == "DELIVERED")
 
 
 def get_dashboard_summary(start_date: date | None = None, end_date: date | None = None) -> dict:
     db = SessionLocal()
     try:
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(BUSINESS_TIMEZONE).date()
         start_date = start_date or today
         end_date = end_date or start_date
         if end_date < start_date:
             raise ValueError("End date cannot be before start date")
-        period_start = datetime.combine(start_date, time.min)
-        period_end = datetime.combine(end_date + timedelta(days=1), time.min)
+        period_start = datetime.combine(start_date, time.min, BUSINESS_TIMEZONE).astimezone(timezone.utc)
+        period_end = datetime.combine(end_date + timedelta(days=1), time.min, BUSINESS_TIMEZONE).astimezone(timezone.utc)
 
         period_orders = db.query(OrderModel).filter(
             OrderModel.created_at >= period_start,
             OrderModel.created_at < period_end,
         ).all()
         period_revenue = sum(
-            order.total for order in period_orders if order.status not in {"CANCELLED", "PENDING"}
+            order.total for order in period_orders if _is_revenue(order)
         )
         daily = {}
         for order in period_orders:
-            day = order.created_at.date().isoformat()
+            created_at = order.created_at
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            day = created_at.astimezone(BUSINESS_TIMEZONE).date().isoformat()
             bucket = daily.setdefault(day, {"date": day, "order_count": 0, "revenue": 0.0})
             bucket["order_count"] += 1
-            if order.status not in {"CANCELLED", "PENDING"}:
+            if _is_revenue(order):
                 bucket["revenue"] += order.total
 
         pending_orders = db.query(OrderModel).filter(OrderModel.status.in_(ACTIVE_STATUSES)).count()

@@ -110,6 +110,14 @@ Use the same `X-Admin-Token` header for protected order operations.
 
 ## Mobile production scope
 
+Dashboard revenue uses Indian calendar days (UTC+05:30), grouped by the order's
+creation date. It counts verified UPI orders and delivered COD orders; cancelled,
+unpaid, and undelivered COD orders are excluded. This is an order-cohort report,
+not a payment settlement report.
+
+Run the complete regression suite with `python -m pytest -q`. CI runs the same
+suite, including PIN authentication, customer checkout, and revenue tests.
+
 The current production path is:
 
 `Flutter mobile app -> FastAPI -> PostgreSQL`

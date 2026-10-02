@@ -9,7 +9,7 @@ from app.auth import current_customer, logout_customer
 from app.pin_auth import register as register_pin, login as login_pin, refresh as refresh_pin, revoke as revoke_refresh
 from app.db import SessionLocal
 from app.models import AddressModel, CustomerModel, OrderItemModel, OrderModel, OrderStatusHistoryModel, ProductModel
-from app.order_details import get_customer_order, save_payment_link
+from app.order_details import customer_order_dict as _order_dict, get_customer_order, save_payment_link
 from app.payment_service import PaymentError, create_payment_link
 from app.order_status import get_allowed_transitions, list_status_history
 from app.delivery_service import add_message_by_customer, get_tracking_info, list_messages_for_customer
@@ -102,7 +102,7 @@ class AiChatRequest(BaseModel):
 
 def _mobile_ai_reply(message: str, customer_id: str) -> str:
     """Return authoritative order answers before falling back to the LLM."""
-    normalized = message.strip().lower()
+    normalized = message.strip().lower().rstrip("?!. ")
     order_match = re.search(
         r"\b(?:order\s*(?:id|number|no|#)?\s*)?(\d{1,10})\b",
         normalized,
@@ -116,6 +116,7 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
             "track order",
             "where is my order",
             "status of my order",
+            "status of order",
             "my order status",
             "check my order",
             "check order",
@@ -185,7 +186,7 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
             if candidate and candidate.customer_id == customer_id:
                 order = candidate
 
-        if order is None and (asks_status or asks_order_number) and not is_order_id_reply:
+        if order is None and (asks_status or asks_order_number) and not asks_specific_order and not is_order_id_reply:
             order = (
                 db.query(OrderModel)
                 .filter(OrderModel.customer_id == customer_id)
@@ -234,24 +235,6 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
 
 def _address_dict(item: AddressModel) -> dict:
     return {"id": item.id, "label": item.label, "address": item.address, "city": item.city, "pincode": item.pincode, "is_default": item.is_default}
-
-
-def _order_dict(db, order: OrderModel) -> dict:
-    items = db.query(OrderItemModel).filter(OrderItemModel.order_id == order.id).all()
-    return {
-        "order_id": order.id,
-        "status": order.status,
-        "allowed_next_statuses": sorted(get_allowed_transitions(order.status)),
-        "total": order.total,
-        "address": order.address,
-        "payment_method": order.payment_method,
-        "payment_link_url": order.payment_link_url,
-        "created_at": order.created_at.isoformat(),
-        "items": [
-            {"name": i.product_name, "quantity": i.quantity, "unit_price": i.unit_price, "line_total": i.line_total}
-            for i in items
-        ],
-    }
 
 
 @router.post("/auth/register")
@@ -430,7 +413,7 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
             )
             if updated != 1:
                 raise HTTPException(status_code=409, detail=f"Insufficient stock: {product.name}")
-            product = db.get(ProductModel, product.id)
+            db.refresh(product)
             product.in_stock = product.stock_quantity > 0
             line_total = round(product.price * item.quantity, 2)
             db.add(OrderItemModel(order_id=order.id, product_name=product.name, quantity=item.quantity, unit_price=product.price, line_total=line_total))

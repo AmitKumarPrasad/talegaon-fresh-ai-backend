@@ -28,7 +28,7 @@ def test_verify_otp_uses_msg91_provider():
     response = Mock(status_code=200)
     response.json.return_value = {"type": "success", "message": "OTP verified successfully"}
 
-    with patch.dict(os.environ, {"MSG91_AUTHKEY": "secret"}, clear=False),          patch("app.msg91_service.requests.get", return_value=response) as get:
+    with patch.dict(os.environ, {"MSG91_AUTHKEY": "secret", "MSG91_TEMPLATE_ID": "template-123"}, clear=False), patch("app.msg91_service.requests.get", return_value=response) as get:
         assert verify_otp("9876543210", "123456") is True
 
     get.assert_called_once_with(
