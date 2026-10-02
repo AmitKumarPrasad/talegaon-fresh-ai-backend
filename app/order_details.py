@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 
 from app.db import SessionLocal
-from app.models import OrderModel, OrderStatusHistoryModel
+from app.models import OrderItemModel, OrderModel, OrderStatusHistoryModel
+from app.order_status import get_allowed_transitions
 
 
 def update_address(order_id: int, address: str) -> bool:
@@ -82,15 +83,34 @@ def get_order(order_id: int):
         db.close()
 
 
-def get_customer_order(order_id: int, customer_id: str):
-    order = get_order(order_id)
-    if not order or order["customer_id"] != customer_id:
-        return None
+def customer_order_dict(db, order: OrderModel) -> dict:
+    items = db.query(OrderItemModel).filter(OrderItemModel.order_id == order.id).all()
+    created_at = order.created_at
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
     return {
-        "order_id": order["order_id"], "status": order["status"], "total": order["total"],
-        "address": order["address"], "payment_method": order["payment_method"],
-        "payment_link_url": order["payment_link_url"], "payment_verified_at": order["payment_verified_at"],
+        "order_id": order.id, "status": order.status, "total": order.total,
+        "address": order.address, "payment_method": order.payment_method,
+        "payment_link_url": order.payment_link_url,
+        "payment_verified_at": order.payment_verified_at.isoformat() if order.payment_verified_at else None,
+        "created_at": created_at.isoformat(),
+        "allowed_next_statuses": sorted(get_allowed_transitions(order.status)),
+        "items": [
+            {"name": i.product_name, "quantity": i.quantity, "unit_price": i.unit_price, "line_total": i.line_total}
+            for i in items
+        ],
     }
+
+
+def get_customer_order(order_id: int, customer_id: str):
+    db = SessionLocal()
+    try:
+        order = db.get(OrderModel, order_id)
+        if not order or order.customer_id != customer_id:
+            return None
+        return customer_order_dict(db, order)
+    finally:
+        db.close()
 
 
 def transition_order_status(order_id: int, status: str) -> bool:

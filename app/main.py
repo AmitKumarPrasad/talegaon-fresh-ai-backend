@@ -870,20 +870,6 @@ async def razorpay_webhook(request: Request):
             customer_id,
             order["total"],
             order["address"] or "",
-            "UPI CONFIRMED",
-        )
-    except Exception:
-        logger.exception(
-            "Payment confirmed but seller notification failed order_id=%s",
-            order_id,
-        )
-
-    try:
-        notify_seller(
-            order_id,
-            customer_id,
-            order["total"],
-            order["address"] or "",
             "UPI",
         )
     except Exception:

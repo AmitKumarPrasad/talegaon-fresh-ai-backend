@@ -1,36 +1,49 @@
-import os
+import sys
+from itertools import count
+from unittest.mock import patch
 from datetime import datetime, timezone
-
-os.environ["DATABASE_URL"] = "sqlite:///./test_customer_api.db"
-os.environ["JWT_SECRET"] = "test-secret"
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from fastapi.testclient import TestClient
 
-from app.db import Base, engine
+from app.db import Base, SessionLocal
 from app.main import app
 from app.models import OrderModel, OrderStatusHistoryModel, ProductModel
 
-Base.metadata.create_all(bind=engine)
-
 client = TestClient(app)
+_phones = count(9999999999, -1)
 
 
 def auth():
-    requested = client.post("/auth/request-otp", json={"phone": "919999999999", "name": "Test User"})
-    assert requested.status_code == 200
-    otp = requested.json()["demo_otp"]
-    verified = client.post("/auth/verify-otp", json={"phone": "919999999999", "otp": otp})
-    assert verified.status_code == 200
-    return verified.json()["token"]
+    registered = client.post("/auth/register", json={
+        "phone": str(next(_phones)), "name": "Test User", "pin": "123456",
+        "device_id": "customer-api-test-device",
+    })
+    assert registered.status_code == 200
+    return registered.json()["access_token"]
 
 
-def setup_module():
-    from app.db import SessionLocal
-    db = SessionLocal()
-    db.query(ProductModel).delete()
-    db.add(ProductModel(name="Tomato", unit="1 kg", price=40, in_stock=True, stock_quantity=10))
-    db.commit()
-    db.close()
+@pytest.fixture(autouse=True)
+def isolated_customer_database(monkeypatch):
+    global _phones
+    _phones = count(9999999999, -1)
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    factory = sessionmaker(bind=engine, autoflush=False)
+    Base.metadata.create_all(engine)
+    for name, module in list(sys.modules.items()):
+        if name.startswith("app.") and getattr(module, "SessionLocal", None) is SessionLocal:
+            monkeypatch.setattr(module, "SessionLocal", factory)
+    monkeypatch.setenv("JWT_SECRET", "customer-api-test-secret")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setattr("app.customer_api.notify_seller", lambda *args, **kwargs: None)
+    with factory() as db:
+        db.add(ProductModel(name="Tomato", unit="1 kg", price=40, in_stock=True, stock_quantity=10))
+        db.commit()
+    yield
+    engine.dispose()
 
 
 def test_auth_and_addresses():
@@ -186,8 +199,8 @@ def test_customer_upi_payment_link_is_created_and_reused():
         first = client.post(f"/customers/me/orders/{order_id}/payment-link", headers=headers)
         assert first.status_code == 200
         assert first.json()["payment_link_url"] == "https://rzp.io/i/customer-test"
-        assert first.json()["razorpay_payment_link_id"] == "plink_customer_123"
-        create_link.assert_called_once_with(order_id, 40.0, "919999999999")
+        assert "razorpay_payment_link_id" not in first.json()
+        create_link.assert_called_once_with(order_id, 40.0, "9999999999")
 
         second = client.post(f"/customers/me/orders/{order_id}/payment-link", headers=headers)
         assert second.status_code == 200
@@ -213,26 +226,24 @@ def test_unauthorized_customer_api():
     assert response.status_code == 401
 
 
-def test_otp_request_rate_limit():
-    phone = "919999999998"
-    for _ in range(3):
-        response = client.post("/auth/request-otp", json={"phone": phone})
-        assert response.status_code == 200
-    limited = client.post("/auth/request-otp", json={"phone": phone})
-    assert limited.status_code == 429
+def test_registration_rejects_duplicate_account():
+    auth()
+    duplicate = client.post("/auth/register", json={
+        "phone": "9999999999", "pin": "123456", "device_id": "customer-api-test-device",
+    })
+    assert duplicate.status_code == 409
 
 
-def test_otp_invalid_attempt_lockout():
-    phone = "919999999997"
-    requested = client.post("/auth/request-otp", json={"phone": phone})
-    assert requested.status_code == 200
+def test_pin_invalid_attempt_lockout():
+    auth()
+    payload = {"phone": "9999999999", "pin": "000000", "device_id": "customer-api-test-device"}
     for _ in range(4):
-        response = client.post("/auth/verify-otp", json={"phone": phone, "otp": "000000"})
+        response = client.post("/auth/login", json=payload)
         assert response.status_code == 401
-    locked = client.post("/auth/verify-otp", json={"phone": phone, "otp": "000000"})
+    locked = client.post("/auth/login", json=payload)
     assert locked.status_code == 429
-    requested_again = client.post("/auth/request-otp", json={"phone": phone})
-    assert requested_again.status_code == 429
+    payload["pin"] = "123456"
+    assert client.post("/auth/login", json=payload).status_code == 429
 
 
 def test_logout_revokes_existing_token():
@@ -301,7 +312,7 @@ def test_order_reserves_stock_and_rejects_insufficient_quantity():
 
 
 def test_order_consumes_exact_remaining_stock_and_marks_product_out_of_stock():
-    _reset_tomato_stock()
+    _reset_tomato_stock(4)
     token = auth()
     headers = {"Authorization": f"Bearer {token}"}
     order = client.post("/customers/me/orders", headers=headers, json={
@@ -373,20 +384,20 @@ def test_checkout_notifies_seller_after_order_commit():
         assert body["total"] == 100.0
         notify.assert_called_once()
         call = notify.call_args.kwargs
-        assert call["order_id"] == body["id"]
+        assert call["order_id"] == body["order_id"]
         assert call["total"] == 100.0
         assert call["payment_method"] == "COD"
 
         db = SessionLocal()
-        created = db.get(OrderModel, body["id"])
+        created = db.get(OrderModel, body["order_id"])
         assert created is not None
         assert created.status == "CONFIRMED"
         assert created.total == 100.0
         db.close()
     finally:
         db = SessionLocal()
-        if body is not None and body.get("id") is not None:
-            created = db.get(OrderModel, body["id"])
+        if body is not None and body.get("order_id") is not None:
+            created = db.get(OrderModel, body["order_id"])
             if created:
                 db.delete(created)
         test_product = db.get(ProductModel, product_id)
