@@ -13,6 +13,7 @@ def list_current_prices() -> list[dict]:
                 "id": row.id,
                 "name": row.name,
                 "unit": row.unit,
+                "category": getattr(row, "category", "Other"),
                 "price": row.price,
                 "in_stock": row.in_stock,
                 "image_url": row.image_url,
@@ -28,13 +29,21 @@ def _product_response(product: ProductModel) -> dict:
         "id": product.id,
         "name": product.name,
         "unit": product.unit,
+        "category": getattr(product, "category", "Other"),
         "price": product.price,
         "in_stock": product.in_stock,
         "image_url": getattr(product, "image_url", None),
     }
 
 
-def create_product(name: str, unit: str, price: float, stock_quantity: int = 0, image_url: str | None = None) -> dict:
+def create_product(
+    name: str,
+    unit: str,
+    price: float,
+    stock_quantity: int = 0,
+    image_url: str | None = None,
+    category: str = "Other",
+) -> dict:
     if price <= 0:
         raise ValueError("Price must be greater than zero.")
     if stock_quantity < 0:
@@ -48,6 +57,7 @@ def create_product(name: str, unit: str, price: float, stock_quantity: int = 0, 
         product = ProductModel(
             name=name,
             unit=unit,
+            category=category.strip() or "Other",
             price=price,
             stock_quantity=stock_quantity,
             in_stock=stock_quantity > 0,
