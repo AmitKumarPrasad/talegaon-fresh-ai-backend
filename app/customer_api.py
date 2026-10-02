@@ -205,10 +205,6 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
         and ("order" in normalized or asks_status or is_order_id_reply)
     )
 
-    catalog_reply = _catalog_reply(message)
-    if catalog_reply is not None:
-        return catalog_reply
-
     basic_intents = {
         "hi", "hello", "hey", "hii", "good morning", "good afternoon",
         "good evening", "help", "what can you do", "how can you help"

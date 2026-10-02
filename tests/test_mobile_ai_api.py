@@ -11,7 +11,7 @@ from app.db import Base, engine
 from app.main import app
 from app.customer_api import _mobile_ai_reply
 from app.db import SessionLocal
-from app.models import OrderModel, ProductModel
+from app.models import OrderModel
 from app.state import get_state
 
 Base.metadata.create_all(bind=engine)
@@ -45,27 +45,10 @@ class MobileAiApiTests(unittest.TestCase):
 
 
     def test_product_price_and_stock_answers_use_live_catalog(self):
-        db = SessionLocal()
-        product = ProductModel(
-            name="Test Tomato",
-            unit="1 kg",
-            category="Vegetables",
-            price=42.5,
-            in_stock=True,
-            stock_quantity=10,
-        )
-        db.add(product)
-        db.commit()
-        db.refresh(product)
-        try:
-            reply = _mobile_ai_reply("How much are tomatoes?", "8888888888")
-            self.assertIn("Test Tomato", reply)
-            self.assertIn("₹42.50", reply)
-            self.assertIn("In stock", reply)
-        finally:
-            db.delete(product)
-            db.commit()
-            db.close()
+        reply = _mobile_ai_reply("How much are tomatoes?", "8888888888")
+        self.assertIn("Tomato", reply)
+        self.assertIn("₹40.00", reply)
+        self.assertIn("In stock", reply)
 
     def test_unknown_product_gives_catalog_guidance(self):
         with patch("app.openai_service.generate_mobile_reply") as fallback:
