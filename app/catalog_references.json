@@ -270,5 +270,75 @@
     "source_url": "https://www.bigbasket.com/pd/267400/nescafe-classic-100-pure-instant-coffee-50-g-pouch/",
     "image_url": "https://www.bbassets.com/media/uploads/p/s/267400_13-nescafe-classic-100-pure-instant-coffee.jpg",
     "checked_on": "2026-10-02"
+  },
+  {
+    "id": 55,
+    "name": "Surf Excel Matic Front Load Detergent Powder",
+    "price": 290,
+    "unit": "1 kg",
+    "source_url": "https://www.bigbasket.com/pd/100142980/surf-excel-matic-front-load-detergent-powder-1-kg-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/100142980_22-surf-excel-matic-front-load-detergent-powder.jpg",
+    "category": "Household",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "id": 56,
+    "name": "Vim Lemon Dishwash Liquid Gel",
+    "price": 125,
+    "unit": "500 ml",
+    "source_url": "https://www.bigbasket.com/pd/266962/vim-dishwash-liquid-gel-lemon-500-ml-bottle/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/266962_13-vim-dishwash-liquid-gel-lemon.jpg",
+    "category": "Household",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "id": 57,
+    "name": "Harpic Floral Bathroom Cleaner",
+    "price": 120,
+    "unit": "500 ml",
+    "source_url": "https://www.bigbasket.com/pd/40017766/harpic-disinfectant-bathroom-cleaner-liquid-floral-500-ml/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40017766_15-harpic-disinfectant-bathroom-cleaner-liquid-floral.jpg",
+    "category": "Household",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "id": 58,
+    "name": "Colgate Strong Teeth Toothpaste",
+    "price": 73,
+    "unit": "100 g",
+    "source_url": "https://www.bigbasket.com/pd/100006161/colgate-strong-teeth-anticavity-toothpaste-with-amino-shakti-formula-provides-fresher-breath-100-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/100006161_31-colgate-strong-teeth-anticavity-toothpaste-with-amino-shakti-formula-provides-fresher-breath.jpg",
+    "category": "Personal Care",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "id": 59,
+    "name": "Dettol Skincare Liquid Handwash",
+    "price": 99,
+    "unit": "250 ml",
+    "source_url": "https://www.bigbasket.com/pd/40196286/dettol-skincare-germ-protection-liquid-handwash-250-ml-pump/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40196286_1-dettol-skincare-germ-protection-liquid-handwash.jpg",
+    "category": "Personal Care",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "id": 60,
+    "name": "Lux Soft Glow Rose Soap",
+    "price": 36,
+    "unit": "100 g",
+    "source_url": "https://www.bigbasket.com/pd/306171/lux-beauty-soap-for-glowing-skin-rose-vitamin-e-100-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/306171_8-lux-beauty-soap-for-glowing-skin-rose-vitamin-e.jpg",
+    "category": "Personal Care",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "id": 61,
+    "name": "Ariel Matic Top Load Detergent Powder",
+    "price": 309,
+    "unit": "1 kg",
+    "source_url": "https://www.bigbasket.com/pd/40097082/ariel-matic-detergent-washing-powder-top-load-1-kg/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40097082_16-ariel-matic-detergent-washing-powder-top-load.jpg",
+    "category": "Household",
+    "checked_on": "2026-10-02"
   }
 ]
