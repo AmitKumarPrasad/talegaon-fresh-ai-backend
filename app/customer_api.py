@@ -100,6 +100,54 @@ class AiChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
 
 
+def _catalog_reply(message: str) -> str | None:
+    """Answer product/price/stock questions from the live catalog."""
+    normalized = re.sub(r"[^a-z0-9 ]+", " ", message.strip().lower())
+    asks_catalog = any(
+        term in normalized
+        for term in (
+            "price", "cost", "how much", "available", "in stock",
+            "products", "product list", "what can i buy", "what do you sell",
+        )
+    )
+    if not asks_catalog:
+        return None
+
+    db = SessionLocal()
+    try:
+        products = db.query(ProductModel).order_by(ProductModel.id).all()
+        if not products:
+            return "Please open the Products screen to see the current catalog."
+
+        stop_words = {
+            "what", "are", "is", "the", "price", "cost", "of", "for", "how",
+            "much", "does", "do", "you", "have", "any", "available", "in",
+            "stock", "products", "product", "list", "can", "i", "buy", "show",
+            "me", "please", "tell", "about", "today", "your",
+        }
+        tokens = {token for token in normalized.split() if len(token) >= 3 and token not in stop_words}
+        matches = [
+            product for product in products
+            if not tokens or any(
+                token in product.name.lower() or product.name.lower() in token
+                for token in tokens
+            )
+        ]
+        if not matches and tokens:
+            return "I couldn't find that item. Please check the Products screen for the live catalog."
+        if not tokens:
+            matches = products[:8]
+
+        lines = []
+        for product in matches[:8]:
+            availability = "In stock" if product.in_stock else "Out of stock"
+            lines.append(f"• {product.name} ({product.unit}) — ₹{product.price:.2f} · {availability}")
+        prefix = "Here are the live catalog details:" if tokens else "Here are some products currently listed:"
+        return prefix + "\n" + "\n".join(lines) + "\n\nPrices and stock can change; the Products screen is authoritative."
+    finally:
+        db.close()
+
+
 def _mobile_ai_reply(message: str, customer_id: str) -> str:
     """Return authoritative order answers before falling back to the LLM."""
     normalized = message.strip().lower().rstrip("?!. ")
@@ -156,6 +204,10 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
         order_match is not None
         and ("order" in normalized or asks_status or is_order_id_reply)
     )
+
+    catalog_reply = _catalog_reply(message)
+    if catalog_reply is not None:
+        return catalog_reply
 
     basic_intents = {
         "hi", "hello", "hey", "hii", "good morning", "good afternoon",
