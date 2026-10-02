@@ -20,6 +20,7 @@ class ProductModel(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     unit: Mapped[str] = mapped_column(String(30))
+    category: Mapped[str] = mapped_column(String(50), default="Other", nullable=False)
     price: Mapped[float] = mapped_column(Float)
     in_stock: Mapped[bool] = mapped_column(Boolean, default=True)
     stock_quantity: Mapped[int] = mapped_column(Integer, default=0)
