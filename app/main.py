@@ -168,6 +168,7 @@ class PriceUpdateRequest(BaseModel):
 class CreateProductRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     unit: str = Field(min_length=1, max_length=30)
+    category: str = Field(default="Other", min_length=1, max_length=50)
     price: float = Field(gt=0)
     stock_quantity: int = Field(default=0, ge=0)
     image_url: str | None = Field(default=None, max_length=500)
@@ -251,7 +252,12 @@ async def admin_create_product(payload: CreateProductRequest, request: Request):
         return PlainTextResponse("Unauthorized", status_code=401)
     try:
         product = create_product(
-            payload.name, payload.unit, payload.price, payload.stock_quantity, payload.image_url
+            name=payload.name,
+            unit=payload.unit,
+            price=payload.price,
+            stock_quantity=payload.stock_quantity,
+            image_url=payload.image_url,
+            category=payload.category,
         )
     except ValueError as exc:
         return PlainTextResponse(str(exc), status_code=400)
