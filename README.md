@@ -56,6 +56,13 @@ Example request body:
 
 Customer orders always calculate totals from the current database price; the AI does not choose prices.
 
+### Product catalog categories
+
+The customer catalog now carries a stable `category` field. Baseline categories are Vegetables, Leafy Greens, Fruits, Dairy, Grocery, Snacks, Masala & Spices, Beverages, Bakery & Breakfast, and Instant Food.
+
+The baseline packaged-goods prices are reference values used only when a catalog item is first initialized. Retail prices vary by date and delivery area, and fresh-produce prices can move daily. Production selling prices remain server-authoritative and should be maintained with the admin price APIs; catalog seeding does not overwrite an existing product's price or stock.
+
+
 ## Production deployment
 
 Build the image with Docker and provide production environment variables at runtime. By default, the image runs Alembic migrations before starting FastAPI and listens on 0.0.0.0 using PORT. Set `RUN_MIGRATIONS=false` when migrations are executed by a separate release/migration job (recommended for multi-instance deployments).
