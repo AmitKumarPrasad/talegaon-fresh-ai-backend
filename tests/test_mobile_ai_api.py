@@ -43,6 +43,36 @@ class MobileAiApiTests(unittest.TestCase):
         self.assertEqual(response.json()["reply"], "Please check the Products screen for live prices and stock.")
         reply.assert_called_once_with("How much are tomatoes?", "8888888888")
 
+
+    def test_product_price_and_stock_answers_use_live_catalog(self):
+        db = SessionLocal()
+        product = ProductModel(
+            name="Test Tomato",
+            unit="1 kg",
+            category="Vegetables",
+            price=42.5,
+            in_stock=True,
+            stock_quantity=10,
+        )
+        db.add(product)
+        db.commit()
+        db.refresh(product)
+        try:
+            reply = _mobile_ai_reply("How much are tomatoes?", "8888888888")
+            self.assertIn("Test Tomato", reply)
+            self.assertIn("₹42.50", reply)
+            self.assertIn("In stock", reply)
+        finally:
+            db.delete(product)
+            db.commit()
+            db.close()
+
+    def test_unknown_product_gives_catalog_guidance(self):
+        with patch("app.openai_service.generate_mobile_reply") as fallback:
+            reply = _mobile_ai_reply("How much is dragonfruit?", "8888888888")
+        self.assertIn("couldn't find that item", reply)
+        fallback.assert_not_called()
+
     def test_order_number_and_tracking_use_customer_order(self):
         token = auth()
         db = SessionLocal()
