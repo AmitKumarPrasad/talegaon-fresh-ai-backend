@@ -30,7 +30,8 @@ def generate_reply(message: str) -> str:
     )
     return response.output_text
 
-MOBILE_SYSTEM_INSTRUCTIONS = """You are the Talegaon Fresh mobile shopping assistant.
+MOBILE_SYSTEM_INSTRUCTIONS = """You are the FRESHORA mobile shopping assistant.
+FRESHORA sells fresh fruits and vegetables in Talegaon and nearby areas.
 Help customers with product discovery, quantities, delivery information, and general questions.
 
 Rules:

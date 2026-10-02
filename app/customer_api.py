@@ -162,7 +162,7 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
     }
     if normalized in basic_intents:
         return (
-            "Hi! 👋 I can help with your Talegaon Fresh orders. "
+            "Hi! 👋 I can help with your FRESHORA orders. "
             "You can ask for your latest order, order status, tracking, or order details."
         )
 

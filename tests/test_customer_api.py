@@ -513,7 +513,7 @@ def test_ai_greeting_uses_deterministic_help_response():
 
     assert response.status_code == 200
     reply = response.json()["reply"]
-    assert "Talegaon Fresh" in reply
+    assert "FRESHORA" in reply
     assert "order status" in reply.lower()
     generate.assert_not_called()
 
