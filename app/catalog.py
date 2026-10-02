@@ -45,11 +45,15 @@ PRODUCTS = [
     Product(33, "Tata Salt Iodised", "1 kg", "Grocery"),
     Product(34, "Sugar", "1 kg", "Grocery"),
     Product(35, "Tata Sampann Toor Dal", "1 kg", "Grocery"),
-    Product(36, "Fortune Sunlite Sunflower Oil", "840 g", "Grocery"),
+    Product(36, "Fortune Sunlite Sunflower Oil", "800 g", "Grocery"),
     Product(37, "Maggi Masala Noodles", "280 g", "Instant Food"),
     Product(38, "Tata Tea Gold", "500 g", "Beverages"),
     Product(39, "Harvest Gold Atta Bread", "450 g", "Bakery & Breakfast"),
     Product(40, "Catch Coriander Powder", "100 g", "Masala & Spices"),
+    Product(41, "Tata Sampann Thick Poha", "500 g", "Bakery & Breakfast"),
+    Product(42, "Tata Sampann Moong Dal", "1 kg", "Grocery"),
+    Product(43, "Tata Sampann Turmeric Powder", "100 g", "Masala & Spices"),
+    Product(44, "Haldiram's Aloo Bhujia", "200 g", "Snacks"),
 ]
 
 
