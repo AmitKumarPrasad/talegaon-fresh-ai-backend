@@ -1,6 +1,6 @@
 # FRESHORA catalog references — 2 October 2026
 
-The catalog contains 61 products across 10 categories. Migration 0015 added thick
+The catalog contains 66 products across 12 categories. Migration 0015 added thick
 poha (500 g), moong dal (1 kg), turmeric powder (100 g), and aloo bhujia (200 g).
 Migration 0016 adds rava, besan, chana dal, whole masoor dal, sabudana, raw peanuts,
 jaggery powder, cow ghee, spiced buttermilk, and instant coffee.
@@ -21,7 +21,7 @@ package image is omitted because the catalog item is unbranded. Fresh produce
 continues to use the bundled Flutter photos. Retailer image links depend on
 external availability; Flutter already handles failed images with a fallback.
 
-Migrations 0015, 0016 and 0017 insert the 21 catalog additions and fill images on deployment. The
+Migrations 0015, 0016, 0017 and 0018 insert the 26 catalog additions and fill images on deployment. The
 existing `/products` API exposes category and image URL; the category filters
 merged in Flutter PR #59 display these products without another app schema change.
 
@@ -30,10 +30,11 @@ example, the instant coffee page has a 50 g URL but currently lists a 45 g pouch
 Branded items use matching package photos; bb Royal products retain their brand
 in the catalog name rather than representing them as unbranded local stock.
 
-Household and personal care are now represented by a small starter range; additional seasonal produce, dry fruits and household
-cleaning products. Eggs and frozen goods depend on the intended
-assortment and handling facilities. Confirm supplier availability and local
+Household and personal care are now represented by a small starter range; additional seasonal produce and household cleaning products. Frozen goods depend on the intended assortment and handling facilities. Confirm supplier availability and local
 purchase costs before expanding those lines or promising stock.
 
 
 Migration 0017 adds three household cleaners/detergents and four personal-care products with verified pack sizes and image URLs. Household and personal-care prices are online reference defaults only; admin selling prices and inventory remain authoritative.
+
+
+Migration 0018 adds one fresh-egg option and four dry-fruit staples with verified pack sizes and image URLs. Eggs and dry-fruit prices are online reference defaults only; admin selling prices and inventory remain authoritative.
