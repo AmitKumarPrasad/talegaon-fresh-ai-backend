@@ -190,5 +190,85 @@
     "source_url": "https://www.bigbasket.com/pd/263128/haldirams-namkeen-aloo-bhujia-150-g-pouch/",
     "image_url": "https://www.bbassets.com/media/uploads/p/s/263128_5-haldirams-namkeen-aloo-bhujia.jpg",
     "checked_on": "2026-10-02"
+  },
+  {
+    "name": "bb Royal Sooji Bombay Rava",
+    "price": 29,
+    "unit": "500 g",
+    "source_url": "https://www.bigbasket.com/pd/10000422/bb-royal-sooji-ordinarybombay-rava-500-g-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/10000422_12-bb-royal-sooji-ordinarybombay-rava.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Tata Sampann Fine Besan",
+    "price": 66,
+    "unit": "500 g",
+    "source_url": "https://www.bigbasket.com/pd/30002289/tata-sampann-100-chana-dal-fine-besan-500-g-0/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/30002289_7-tata-sampann-100-chana-dal-fine-besan.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Tata Sampann Chana Dal",
+    "price": 124,
+    "unit": "1 kg",
+    "source_url": "https://www.bigbasket.com/pd/40000290/tata-sampann-unpolished-chana-dal-1-kg-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40000290_12-tata-sampann-unpolished-chana-dal.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Tata Sampann Whole Masoor Dal",
+    "price": 155,
+    "unit": "1 kg",
+    "source_url": "https://www.bigbasket.com/pd/30002286/tata-sampann-unpolished-masoor-dal-whole-1-kg-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/30002286_11-tata-sampann-unpolished-masoor-dal-whole.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Gaay Chhap Sabudana",
+    "price": 63,
+    "unit": "500 g",
+    "source_url": "https://www.bigbasket.com/pd/40048473/gaay-chhap-sabudana-500-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40048473_1-gaay-chhap-sabudana.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "bb Royal Raw Peanuts",
+    "price": 115,
+    "unit": "500 g",
+    "source_url": "https://www.bigbasket.com/pd/10000442/bb-royal-peanuts-mungaphalishengdana-raw-500-g-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/10000442_22-bb-royal-peanuts-mungaphalishengdana-raw.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Organic Tattva Jaggery Powder",
+    "price": 76.95,
+    "unit": "500 g",
+    "source_url": "https://www.bigbasket.com/pd/40002647/organic-tattva-organic-powder-jaggery-500-g-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40002647_5-organic-tattva-organic-powder-jaggery.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Amul Cow Ghee",
+    "price": 348.25,
+    "unit": "500 ml",
+    "source_url": "https://www.bigbasket.com/pd/40050542/amul-cow-ghee-500-ml-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40050542_6-amul-cow-ghee.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Amul Spiced Buttermilk",
+    "price": 15,
+    "unit": "200 ml",
+    "source_url": "https://www.bigbasket.com/pd/161899/amul-masti-buttermilk-spice-200-ml-carton/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/161899_10-amul-masti-buttermilk-spice.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Nescafe Classic Instant Coffee Powder",
+    "price": 230,
+    "unit": "45 g",
+    "source_url": "https://www.bigbasket.com/pd/267400/nescafe-classic-100-pure-instant-coffee-50-g-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/267400_13-nescafe-classic-100-pure-instant-coffee.jpg",
+    "checked_on": "2026-10-02"
   }
 ]

@@ -54,6 +54,16 @@ PRODUCTS = [
     Product(42, "Tata Sampann Moong Dal", "1 kg", "Grocery"),
     Product(43, "Tata Sampann Turmeric Powder", "100 g", "Masala & Spices"),
     Product(44, "Haldiram's Aloo Bhujia", "200 g", "Snacks"),
+    Product(45, "bb Royal Sooji Bombay Rava", "500 g", "Bakery & Breakfast"),
+    Product(46, "Tata Sampann Fine Besan", "500 g", "Grocery"),
+    Product(47, "Tata Sampann Chana Dal", "1 kg", "Grocery"),
+    Product(48, "Tata Sampann Whole Masoor Dal", "1 kg", "Grocery"),
+    Product(49, "Gaay Chhap Sabudana", "500 g", "Grocery"),
+    Product(50, "bb Royal Raw Peanuts", "500 g", "Grocery"),
+    Product(51, "Organic Tattva Jaggery Powder", "500 g", "Grocery"),
+    Product(52, "Amul Cow Ghee", "500 ml", "Dairy"),
+    Product(53, "Amul Spiced Buttermilk", "200 ml", "Dairy"),
+    Product(54, "Nescafe Classic Instant Coffee Powder", "45 g", "Beverages"),
 ]
 
 
