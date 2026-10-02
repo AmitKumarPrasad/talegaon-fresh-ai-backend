@@ -42,13 +42,13 @@ class ExpandedCatalogTests(unittest.TestCase):
         self.assertEqual(SEED_PRICES["Amul Taaza Milk"], 59)
 
         self.assertEqual(by_name["Lay's Cream & Onion Chips"].category, "Snacks")
-        self.assertEqual(SEED_PRICES["Lay's Cream & Onion Chips"], 20)
+        self.assertEqual(SEED_PRICES["Lay's Cream & Onion Chips"], 17)
 
         self.assertEqual(
             by_name["Aashirvaad Whole Wheat Atta"].category,
             "Grocery",
         )
-        self.assertEqual(SEED_PRICES["Aashirvaad Whole Wheat Atta"], 264)
+        self.assertEqual(SEED_PRICES["Aashirvaad Whole Wheat Atta"], 266)
 
 
 if __name__ == "__main__":

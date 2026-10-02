@@ -1,0 +1,194 @@
+[
+  {
+    "name": "Amul Taaza Milk",
+    "price": 59,
+    "unit": "1 L",
+    "source_url": "https://www.bigbasket.com/pd/40114416/amul-taaza-milk-1-l-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40114416_9-amul-taaza-milk.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Amul Masti Dahi",
+    "price": 50,
+    "unit": "400 g",
+    "source_url": "https://www.bigbasket.com/pd/104851/amul-masti-dahi-400-g-cup/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/104851_5-amul-masti-dahi.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Amul Fresh Malai Paneer",
+    "price": 76,
+    "unit": "200 g",
+    "source_url": "https://www.bigbasket.com/pd/40096747/amul-malai-fresh-paneer-200-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40096747_11-amul-malai-fresh-paneer.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Amul Butter",
+    "price": 63,
+    "unit": "100 g",
+    "source_url": "https://www.bigbasket.com/pd/104860/amul-butter-pasteurised-100-g-carton/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/104860_10-amul-butter-pasteurised.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Amul Pure Milk Cheese Slices",
+    "price": 137,
+    "unit": "200 g",
+    "source_url": "https://www.bigbasket.com/pd/104808/amul-cheese-slices-200-g-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/104808_11-amul-cheese-slices.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Lay's Cream & Onion Chips",
+    "price": 17,
+    "unit": "58 g",
+    "source_url": "https://www.bigbasket.com/pd/102745/lays-potato-chips-american-style-cream-onion-flavour-52-g-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/102745_20-lays-potato-chips-american-style-cream-onion-flavour.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Bingo Tedhe Medhe",
+    "price": 15,
+    "unit": "75 g",
+    "source_url": "https://www.bigbasket.com/pd/40226709/bingo-tedhe-medhe-snacks-with-corn-rice-dal-masala-tadka-90-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40226709_12-bingo-tedhe-medhe-snacks-with-corn-rice-dal-masala-tadka.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Parle Hide & Seek",
+    "price": 26,
+    "unit": "100 g",
+    "source_url": "https://www.bigbasket.com/pd/302121/parle-hide-seek-chocolate-100-g-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/302121_15-parle-hide-seek-chocolate.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Britannia Jim Jam",
+    "price": 30.5,
+    "unit": "138 g",
+    "source_url": "https://www.bigbasket.com/pd/270484/britannia-treat-jim-jam-cream-biscuits-150-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/270484_18-britannia-treat-jim-jam-cream-biscuits.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Chheda's Banana Chips",
+    "price": 67.5,
+    "unit": "170 g",
+    "source_url": "https://www.bigbasket.com/pd/40137106/chhedas-chips-banana-salt-n-pepper-170-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40137106_3-chhedas-chips-banana-salt-n-pepper.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Aashirvaad Whole Wheat Atta",
+    "price": 266,
+    "unit": "5 kg",
+    "source_url": "https://www.bigbasket.com/pd/126903/aashirvaad-atta-whole-wheat-5-kg-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/126903_12-aashirvaad-atta-whole-wheat.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "India Gate Rozana Basmati Rice",
+    "price": 470,
+    "unit": "5 kg",
+    "source_url": "https://www.bigbasket.com/pd/283426/india-gate-basmati-rice-feast-rozzana-5-kg-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/283426_7-india-gate-basmati-rice-feast-rozzana.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Tata Salt Iodised",
+    "price": 28,
+    "unit": "1 kg",
+    "source_url": "https://www.bigbasket.com/pd/241600/tata-salt-iodized-1-kg-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/241600_11-tata-salt-iodized.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Sugar",
+    "price": 55,
+    "unit": "1 kg",
+    "source_url": "https://www.bigbasket.com/pd/40019396/bb-popular-sugar-1-kg/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40019396_12-bb-popular-sugar.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Tata Sampann Toor Dal",
+    "price": 199,
+    "unit": "1 kg",
+    "source_url": "https://www.bigbasket.com/pd/40000291/tata-sampann-unpolished-toor-dalarhar-dal-1-kg-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40000291_16-tata-sampann-unpolished-toor-dalarhar-dal.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Fortune Sunlite Sunflower Oil",
+    "price": 179,
+    "unit": "800 g",
+    "source_url": "https://www.bigbasket.com/pd/274145/fortune-sun-lite-sunflower-refined-oil-1-l-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/274145_20-fortune-sun-lite-sunflower-refined-oil.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Maggi Masala Noodles",
+    "price": 60,
+    "unit": "280 g",
+    "source_url": "https://www.bigbasket.com/pd/266162/maggi-2-minute-instant-noodles-masala-280-g-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/266162_28-maggi-2-minute-instant-noodles-masala.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Tata Tea Gold",
+    "price": 200,
+    "unit": "500 g",
+    "source_url": "https://www.bigbasket.com/pd/240067/tata-tea-gold-tea-500-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/240067_24-tata-tea-gold-tea.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Harvest Gold Atta Bread",
+    "price": 59,
+    "unit": "450 g",
+    "source_url": "https://www.bigbasket.com/pd/40026512/harvest-gold-bread-100-atta-450-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40026512_10-harvest-gold-bread-100-atta.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Catch Coriander Powder",
+    "price": 32.8,
+    "unit": "100 g",
+    "source_url": "https://www.bigbasket.com/pd/30006780/catch-coriander-powder-100-g-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/30006780_8-catch-coriander-powder.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Tata Sampann Thick Poha",
+    "price": 43.5,
+    "unit": "500 g",
+    "source_url": "https://www.bigbasket.com/pd/40178083/tata-sampann-thick-poha-500-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40178083_11-tata-sampann-thick-poha.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Tata Sampann Moong Dal",
+    "price": 155.5,
+    "unit": "1 kg",
+    "source_url": "https://www.bigbasket.com/pd/30002287/tata-sampann-unpolished-moong-dal-1-kg-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/30002287_12-tata-sampann-unpolished-moong-dal.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Tata Sampann Turmeric Powder",
+    "price": 37.44,
+    "unit": "100 g",
+    "source_url": "https://www.bigbasket.com/pd/40070758/tata-sampann-turmeric-powder-100-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40070758_19-tata-sampann-turmeric-powder.jpg",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "name": "Haldiram's Aloo Bhujia",
+    "price": 60,
+    "unit": "200 g",
+    "source_url": "https://www.bigbasket.com/pd/263128/haldirams-namkeen-aloo-bhujia-150-g-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/263128_5-haldirams-namkeen-aloo-bhujia.jpg",
+    "checked_on": "2026-10-02"
+  }
+]
