@@ -64,6 +64,13 @@ PRODUCTS = [
     Product(52, "Amul Cow Ghee", "500 ml", "Dairy"),
     Product(53, "Amul Spiced Buttermilk", "200 ml", "Dairy"),
     Product(54, "Nescafe Classic Instant Coffee Powder", "45 g", "Beverages"),
+    Product(55, "Surf Excel Matic Front Load Detergent Powder", "1 kg", "Household"),
+    Product(56, "Vim Lemon Dishwash Liquid Gel", "500 ml", "Household"),
+    Product(57, "Harpic Floral Bathroom Cleaner", "500 ml", "Household"),
+    Product(58, "Colgate Strong Teeth Toothpaste", "100 g", "Personal Care"),
+    Product(59, "Dettol Skincare Liquid Handwash", "250 ml", "Personal Care"),
+    Product(60, "Lux Soft Glow Rose Soap", "100 g", "Personal Care"),
+    Product(61, "Ariel Matic Top Load Detergent Powder", "1 kg", "Household"),
 ]
 
 
