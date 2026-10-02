@@ -71,6 +71,11 @@ PRODUCTS = [
     Product(59, "Dettol Skincare Liquid Handwash", "250 ml", "Personal Care"),
     Product(60, "Lux Soft Glow Rose Soap", "100 g", "Personal Care"),
     Product(61, "Ariel Matic Top Load Detergent Powder", "1 kg", "Household"),
+    Product(62, "SKM Best Fresh Eggs", "6 pcs", "Eggs"),
+    Product(63, "Tata Sampann California Almonds", "200 g", "Dry Fruits"),
+    Product(64, "Happilo Premium Whole Cashews", "200 g", "Dry Fruits"),
+    Product(65, "bb Popular Indian Raisins", "200 g", "Dry Fruits"),
+    Product(66, "Happilo Premium International Queen Kalmi Dates", "200 g", "Dry Fruits"),
 ]
 
 

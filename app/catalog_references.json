@@ -340,5 +340,55 @@
     "image_url": "https://www.bbassets.com/media/uploads/p/s/40097082_16-ariel-matic-detergent-washing-powder-top-load.jpg",
     "category": "Household",
     "checked_on": "2026-10-02"
+  },
+  {
+    "id": 62,
+    "name": "SKM Best Fresh Eggs",
+    "price": 84,
+    "unit": "6 pcs",
+    "source_url": "https://www.bigbasket.com/pd/40348991/skm-best-fresh-eggs-6-pcs/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40348991_1-skm-best-fresh-eggs.jpg",
+    "category": "Eggs",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "id": 63,
+    "name": "Tata Sampann California Almonds",
+    "price": 251.16,
+    "unit": "200 g",
+    "source_url": "https://www.bigbasket.com/pd/40309615/tata-sampann-100-pure-california-almonds-whole-premium-quality-badam-giri-200-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40309615_7-tata-sampann-100-pure-california-almonds-whole-premium-quality-badam-giri.jpg",
+    "category": "Dry Fruits",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "id": 64,
+    "name": "Happilo Premium Whole Cashews",
+    "price": 282,
+    "unit": "200 g",
+    "source_url": "https://www.bigbasket.com/pd/40087196/happilo-premium-natural-whole-cashews-200-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40087196_7-happilo-premium-natural-whole-cashews.jpg",
+    "category": "Dry Fruits",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "id": 65,
+    "name": "bb Popular Indian Raisins",
+    "price": 100,
+    "unit": "200 g",
+    "source_url": "https://www.bigbasket.com/pd/40002629/bb-popular-raisinskishmish-indian-200-g-pouch/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40002629_11-bb-popular-raisinskishmish-indian.jpg",
+    "category": "Dry Fruits",
+    "checked_on": "2026-10-02"
+  },
+  {
+    "id": 66,
+    "name": "Happilo Premium International Queen Kalmi Dates",
+    "price": 330.45,
+    "unit": "200 g",
+    "source_url": "https://www.bigbasket.com/pd/40123722/happilo-premium-international-queen-kalmi-dates-200-g/",
+    "image_url": "https://www.bbassets.com/media/uploads/p/s/40123722_7-happilo-premium-international-queen-kalmi-dates.jpg",
+    "category": "Dry Fruits",
+    "checked_on": "2026-10-02"
   }
 ]

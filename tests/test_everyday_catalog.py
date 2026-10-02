@@ -34,7 +34,7 @@ def test_everyday_products_migrate_to_customer_api_without_overwriting_admin(tmp
         response = TestClient(app).get("/products")
     assert response.status_code == 200
     products = response.json()["products"]
-    assert len(products) == 61
+    assert len(products) == 66
     by_name = {product["name"].lower(): product for product in products}
     ghee = by_name["amul cow ghee"]
     assert (ghee["id"], ghee["unit"], ghee["category"], ghee["price"], ghee["in_stock"]) == (
