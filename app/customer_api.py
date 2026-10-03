@@ -6,9 +6,25 @@ from pydantic import BaseModel, Field, field_validator
 import os
 
 from app.auth import current_customer, logout_customer
-from app.pin_auth import register as register_pin, login as login_pin, refresh as refresh_pin, revoke as revoke_refresh
+from app.pin_auth import (
+    CustomerSessionModel,
+    PinCredentialModel,
+    register as register_pin,
+    login as login_pin,
+    refresh as refresh_pin,
+    revoke as revoke_refresh,
+)
 from app.db import SessionLocal
-from app.models import AddressModel, CustomerModel, OrderItemModel, OrderModel, OrderStatusHistoryModel, ProductModel
+from app.models import (
+    AddressModel,
+    ConversationStateModel,
+    CustomerModel,
+    OrderItemModel,
+    OrderMessageModel,
+    OrderModel,
+    OrderStatusHistoryModel,
+    ProductModel,
+)
 from app.order_details import customer_order_dict as _order_dict, get_customer_order, save_payment_link
 from app.payment_service import PaymentError, create_payment_link
 from app.order_status import get_allowed_transitions, list_status_history
@@ -314,6 +330,38 @@ def auth_logout_session(payload: RefreshRequest):
 def auth_logout(customer: CustomerModel = Depends(current_customer)):
     logout_customer(customer)
     return {"status": "logged_out"}
+
+@router.delete("/customers/me")
+def delete_customer_account(customer: CustomerModel = Depends(current_customer)):
+    """Delete account data and anonymize retained transaction records."""
+    db = SessionLocal()
+    try:
+        orders = db.query(OrderModel).filter(OrderModel.customer_id == customer.phone).all()
+        order_ids = [order.id for order in orders]
+        if order_ids:
+            db.query(OrderMessageModel).filter(OrderMessageModel.order_id.in_(order_ids)).delete(synchronize_session=False)
+            db.query(OrderItemModel).filter(OrderItemModel.order_id.in_(order_ids)).delete(synchronize_session=False)
+            db.query(OrderStatusHistoryModel).filter(OrderStatusHistoryModel.order_id.in_(order_ids)).delete(synchronize_session=False)
+            for order in orders:
+                order.customer_id = "deleted"
+                order.address = None
+                order.delivery_person_name = None
+                order.delivery_person_phone = None
+                order.delivery_token = None
+                order.delivery_token_expires_at = None
+                order.delivery_lat = None
+                order.delivery_lng = None
+                order.delivery_location_updated_at = None
+
+        db.query(AddressModel).filter(AddressModel.customer_id == customer.phone).delete(synchronize_session=False)
+        db.query(CustomerSessionModel).filter(CustomerSessionModel.customer_id == customer.phone).delete(synchronize_session=False)
+        db.query(PinCredentialModel).filter(PinCredentialModel.customer_id == customer.phone).delete(synchronize_session=False)
+        db.query(ConversationStateModel).filter(ConversationStateModel.customer_id == customer.phone).delete(synchronize_session=False)
+        db.delete(customer)
+        db.commit()
+        return {"status": "deleted"}
+    finally:
+        db.close()
 
 
 @router.get("/customers/me")
