@@ -34,9 +34,14 @@ OPTIONAL_PRODUCTION_VARS = (
 )
 
 
+def is_production_environment() -> bool:
+    """Treat the managed Render runtime as production even if ENVIRONMENT is omitted."""
+    return os.getenv("ENVIRONMENT", "").lower() == "production" or os.getenv("RENDER", "").lower() == "true"
+
+
 def get_cors_allowed_origins() -> list[str]:
     """Return validated CORS origins from CORS_ALLOWED_ORIGINS."""
-    environment = os.getenv("ENVIRONMENT", "development").lower()
+    environment = "production" if is_production_environment() else os.getenv("ENVIRONMENT", "development").lower()
     default = "" if environment == "production" else "*"
     raw = os.getenv("CORS_ALLOWED_ORIGINS", default)
     origins = [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
@@ -63,7 +68,7 @@ def get_cors_allowed_origins() -> list[str]:
 
 
 def validate_production_config() -> None:
-    if os.getenv("ENVIRONMENT", "development").lower() != "production":
+    if not is_production_environment():
         return
 
     missing = [name for name in REQUIRED_PRODUCTION_VARS if not os.getenv(name)]
