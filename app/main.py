@@ -142,6 +142,37 @@ def root() -> dict:
     return health()
 
 
+@app.get("/privacy-policy", response_class=HTMLResponse)
+def privacy_policy_page():
+    return HTMLResponse("""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy Policy | FRESHORA</title>
+<style>body{font-family:Arial,sans-serif;line-height:1.65;color:#1f2937;max-width:900px;margin:auto;padding:32px 20px}h1,h2{color:#166534}a{color:#166534}</style></head>
+<body><h1>Privacy Policy</h1><p><strong>Last updated: October 3, 2026</strong></p>
+<p>FRESHORA is a grocery ordering service operated under the Talegaon Fresh brand.</p>
+<h2>Information we collect</h2><p>We collect your name, mobile number, delivery addresses, order details, customer-support or AI messages, and information needed to authenticate and secure your account. If you grant location access, we may use approximate location to help identify your delivery area.</p>
+<h2>How we use information</h2><p>We use this information to create your account, process and deliver orders, show order status, provide support, prevent abuse, and operate the service.</p>
+<h2>Third-party processing</h2><p>AI assistant messages may be processed by our backend and AI infrastructure providers. Cloud hosting and database providers process information needed to operate the service. We do not sell customer personal information.</p>
+<h2>Retention and deletion</h2><p>Use the <a href="/delete-account">account deletion page</a> to delete your account and personal data. Transaction records may be retained in anonymized form when required for legal, accounting, fraud-prevention or dispute-resolution purposes.</p>
+<h2>Security</h2><p>We use HTTPS, secure session storage, one-way PIN hashing, access controls and rate limiting. No internet service can guarantee absolute security.</p>
+<h2>Contact</h2><p>For privacy requests, contact Talegaon Fresh via <a href="https://wa.me/918788543135">WhatsApp at +91 87885 43135</a>.</p>
+</body></html>""")
+
+
+@app.get("/delete-account", response_class=HTMLResponse)
+def delete_account_page():
+    return HTMLResponse("""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Delete Account | FRESHORA</title>
+<style>body{font-family:Arial,sans-serif;line-height:1.65;color:#1f2937;max-width:900px;margin:auto;padding:32px 20px}h1,h2{color:#166534}.box{background:#f0fdf4;border-left:4px solid #166534;padding:16px;margin:20px 0}a{color:#166534}</style></head>
+<body><h1>Delete your FRESHORA account</h1>
+<p>Sign in to the FRESHORA app, open <strong>Profile</strong>, choose <strong>Delete account</strong>, and confirm.</p>
+<div class="box"><strong>Outside the app:</strong> send a WhatsApp request from your registered mobile number to <a href="https://wa.me/918788543135?text=Please%20delete%20my%20FRESHORA%20account%20and%20associated%20personal%20data.">+91 87885 43135</a>.</div>
+<p>We delete account, address, active-session, authentication, saved-cart and assistant-state data. Order records may be retained in anonymized form where required for legal, accounting, fraud-prevention or dispute-resolution purposes.</p>
+<p>Read the <a href="/privacy-policy">Privacy Policy</a>.</p>
+</body></html>""")
+
+
 @app.get("/menu")
 def get_menu() -> dict:
     return {"menu": MENU}
