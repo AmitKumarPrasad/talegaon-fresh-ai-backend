@@ -16,7 +16,7 @@ from app.admin_orders import get_admin_order, list_orders
 from app.admin_dashboard import get_dashboard_summary
 from app.customer_api import router as customer_router
 from app.catalog import product_menu
-from app.config import get_cors_allowed_origins, validate_production_config
+from app.config import get_cors_allowed_origins, is_production_environment, validate_production_config
 from app.delivery_service import (
     add_message_by_delivery,
     assign_delivery_person,
@@ -56,7 +56,7 @@ from app.whatsapp_webhook_security import verify_meta_signature
 
 load_dotenv()
 logger = logging.getLogger(__name__)
-IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
+IS_PRODUCTION = is_production_environment()
 
 app = FastAPI(
     title="Talegaon Fresh AI Agent API",
@@ -96,7 +96,7 @@ def _apply_security_headers(request: Request, response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(self)"
-    if os.getenv("ENVIRONMENT", "development").lower() == "production":
+    if IS_PRODUCTION:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     if request.url.path.startswith("/auth/") or request.url.path.startswith("/customers/me"):
         response.headers["Cache-Control"] = "no-store"
