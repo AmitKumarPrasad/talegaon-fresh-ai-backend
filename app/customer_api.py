@@ -82,15 +82,15 @@ class CartItem(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     unit: str = Field(min_length=1, max_length=30)
     price: float = Field(ge=0)
-    quantity: int = Field(ge=1)
+    quantity: int = Field(ge=1, le=100)
 
 
 class CartRequest(BaseModel):
-    items: list[CartItem] = Field(default_factory=list)
+    items: list[CartItem] = Field(default_factory=list, max_length=50)
 
 
 class OrderRequest(BaseModel):
-    items: list[CartItem] = Field(min_length=1)
+    items: list[CartItem] = Field(min_length=1, max_length=50)
     address_id: int | None = None
     address: str | None = Field(default=None, max_length=500)
     payment_method: str | None = Field(default=None, max_length=20)

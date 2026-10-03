@@ -56,6 +56,8 @@ from app.whatsapp_webhook_security import verify_meta_signature
 
 load_dotenv()
 logger = logging.getLogger(__name__)
+IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
+
 app = FastAPI(
     title="Talegaon Fresh AI Agent API",
     description=(
@@ -63,9 +65,9 @@ app = FastAPI(
         "inventory, pricing, delivery, and AI assistant APIs for Talegaon Fresh."
     ),
     version="0.9.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url=None if IS_PRODUCTION else "/docs",
+    redoc_url=None if IS_PRODUCTION else "/redoc",
+    openapi_url=None if IS_PRODUCTION else "/openapi.json",
 )
 app.add_middleware(
     CORSMiddleware,
@@ -503,14 +505,20 @@ const token = "__TOKEN__";
 const base = window.location.origin;
 let watchId = null;
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[char]));
+}
+
 async function loadOrder() {
   const res = await fetch(`${base}/delivery/${token}/summary`);
   if (!res.ok) { document.getElementById('order-card').innerText = 'Invalid or expired link.'; return; }
   const data = await res.json();
-  let itemsHtml = data.items.map(i => `<li>${i.quantity} x ${i.name}</li>`).join('');
+  let itemsHtml = data.items.map(i => `<li>${escapeHtml(i.quantity)} x ${escapeHtml(i.name)}</li>`).join('');
   document.getElementById('order-card').innerHTML =
-    `<b>Order #${data.order_id}</b> — ${data.status}<br>` +
-    `Address: ${data.address || 'N/A'}<br>Total: Rs.${data.total}<br>Payment: ${data.payment_method || 'N/A'}` +
+    `<b>Order #${escapeHtml(data.order_id)}</b> — ${escapeHtml(data.status)}<br>` +
+    `Address: ${escapeHtml(data.address || 'N/A')}<br>Total: Rs.${escapeHtml(data.total)}<br>Payment: ${escapeHtml(data.payment_method || 'N/A')}` +
     `<ul>${itemsHtml}</ul>`;
 }
 
@@ -536,7 +544,7 @@ async function loadMessages() {
   const data = await res.json();
   const chat = document.getElementById('chat');
   chat.innerHTML = data.messages.map(m =>
-    `<div class="bubble ${m.sender === 'delivery' ? 'delivery' : 'customer'}">${m.message}</div>`
+    `<div class="bubble ${m.sender === 'delivery' ? 'delivery' : 'customer'}">${escapeHtml(m.message)}</div>`
   ).join('');
   chat.scrollTop = chat.scrollHeight;
 }
