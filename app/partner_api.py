@@ -13,6 +13,7 @@ from app.db import SessionLocal
 from app.models import (
     DeliveryPartnerModel,
     DeliveryPartnerSessionModel,
+    DeliveryPayoutLedgerModel,
     OrderItemModel,
     OrderModel,
 )
@@ -241,6 +242,33 @@ def partner_order(order_id: int, partner: DeliveryPartnerModel = Depends(current
         db.close()
 
 
+class PartnerLocationRequest(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+
+
+@router.post("/orders/{order_id}/location")
+def partner_update_location(
+    order_id: int,
+    payload: PartnerLocationRequest,
+    partner: DeliveryPartnerModel = Depends(current_partner),
+):
+    db = SessionLocal()
+    try:
+        order = db.get(OrderModel, order_id)
+        if not order or order.delivery_person_phone != partner.phone:
+            raise HTTPException(status_code=404, detail="Assigned order not found")
+        if order.status != "OUT_FOR_DELIVERY" or order.delivery_status != "OUT_FOR_DELIVERY":
+            raise HTTPException(status_code=409, detail="Location updates are available only while out for delivery")
+        order.delivery_lat = payload.lat
+        order.delivery_lng = payload.lng
+        order.delivery_location_updated_at = datetime.now(timezone.utc)
+        db.commit()
+        return {"order_id": order_id, "lat": order.delivery_lat, "lng": order.delivery_lng, "updated_at": order.delivery_location_updated_at.isoformat()}
+    finally:
+        db.close()
+
+
 @router.patch("/orders/{order_id}/status")
 def partner_update_status(
     order_id: int,
@@ -314,6 +342,18 @@ def partner_complete_delivery(
         order.delivery_otp_hash = None
         order.delivery_otp_expires_at = None
         order.delivery_otp_attempts = 0
+        # Create the payout record only after the delivery is verified and delivered.
+        # Amounts are backend-controlled; partners cannot edit payout or COD values.
+        if not db.query(DeliveryPayoutLedgerModel).filter(
+            DeliveryPayoutLedgerModel.order_id == order.id
+        ).first():
+            db.add(DeliveryPayoutLedgerModel(
+                order_id=order.id,
+                partner_phone=partner.phone,
+                payout_amount=25,
+                cod_amount=order.total if order.payment_method == "COD" else 0,
+                status="PENDING",
+            ))
         db.commit()
         return _order_dict(db, order)
     finally:
@@ -324,17 +364,39 @@ def partner_complete_delivery(
 def partner_earnings(partner: DeliveryPartnerModel = Depends(current_partner)):
     db = SessionLocal()
     try:
-        delivered = db.query(OrderModel).filter(
-            OrderModel.delivery_person_phone == partner.phone,
-            OrderModel.delivery_status == "DELIVERED",
-        ).count()
+        entries = (
+            db.query(DeliveryPayoutLedgerModel)
+            .filter(DeliveryPayoutLedgerModel.partner_phone == partner.phone)
+            .order_by(DeliveryPayoutLedgerModel.created_at.desc())
+            .all()
+        )
+        earned = sum(entry.payout_amount for entry in entries)
+        pending = sum(entry.payout_amount for entry in entries if entry.status == "PENDING")
+        paid = sum(entry.payout_amount for entry in entries if entry.status == "PAID")
+        cod = sum(entry.cod_amount for entry in entries)
         return {
             "currency": "INR",
-            "completed_orders": delivered,
+            "completed_orders": len(entries),
             "base_rate": 25,
-            "estimated_earnings": delivered * 25,
+            "earned_amount": earned,
+            "estimated_earnings": earned,
+            "pending_payout": pending,
+            "paid_amount": paid,
+            "cod_reconciliation_amount": cod,
+            "payout_schedule": "WEEKLY",
             "tips": 0,
-            "status": "ESTIMATE",
+            "status": "LEDGER",
+            "entries": [
+                {
+                    "order_id": entry.order_id,
+                    "payout_amount": entry.payout_amount,
+                    "cod_amount": entry.cod_amount,
+                    "status": entry.status,
+                    "created_at": entry.created_at.isoformat(),
+                    "paid_at": entry.paid_at.isoformat() if entry.paid_at else None,
+                }
+                for entry in entries
+            ],
         }
     finally:
         db.close()
