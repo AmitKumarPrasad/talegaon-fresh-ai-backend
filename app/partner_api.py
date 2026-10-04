@@ -241,6 +241,33 @@ def partner_order(order_id: int, partner: DeliveryPartnerModel = Depends(current
         db.close()
 
 
+class PartnerLocationRequest(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+
+
+@router.post("/orders/{order_id}/location")
+def partner_update_location(
+    order_id: int,
+    payload: PartnerLocationRequest,
+    partner: DeliveryPartnerModel = Depends(current_partner),
+):
+    db = SessionLocal()
+    try:
+        order = db.get(OrderModel, order_id)
+        if not order or order.delivery_person_phone != partner.phone:
+            raise HTTPException(status_code=404, detail="Assigned order not found")
+        if order.status != "OUT_FOR_DELIVERY" or order.delivery_status != "OUT_FOR_DELIVERY":
+            raise HTTPException(status_code=409, detail="Location updates are available only while out for delivery")
+        order.delivery_lat = payload.lat
+        order.delivery_lng = payload.lng
+        order.delivery_location_updated_at = datetime.now(timezone.utc)
+        db.commit()
+        return {"order_id": order_id, "lat": order.delivery_lat, "lng": order.delivery_lng, "updated_at": order.delivery_location_updated_at.isoformat()}
+    finally:
+        db.close()
+
+
 @router.patch("/orders/{order_id}/status")
 def partner_update_status(
     order_id: int,
