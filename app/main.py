@@ -14,7 +14,6 @@ from pydantic import BaseModel, Field
 
 from app.admin_orders import get_admin_order, list_orders
 from app.admin_dashboard import get_dashboard_summary
-from app.admin_auth import create_admin_session
 from app.customer_api import router as customer_router
 from app.partner_api import router as partner_router
 from app.catalog import product_menu
@@ -193,19 +192,6 @@ async def verify_webhook(request: Request):
         return PlainTextResponse(params.get("hub.challenge") or "")
     return PlainTextResponse("Verification failed", status_code=403)
 
-
-
-class AdminSessionRequest(BaseModel):
-    admin_token: str = Field(min_length=1, max_length=500)
-
-
-@app.post("/admin/session")
-def admin_session(payload: AdminSessionRequest) -> dict:
-    return {
-        "access_token": create_admin_session(payload.admin_token),
-        "expires_in": 3600,
-        "token_type": "bearer",
-    }
 
 
 class PriceUpdateRequest(BaseModel):
