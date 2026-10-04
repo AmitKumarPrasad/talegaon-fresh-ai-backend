@@ -418,6 +418,13 @@ class AssignDeliveryRequest(BaseModel):
 async def admin_assign_delivery(order_id: int, payload: AssignDeliveryRequest, request: Request):
     if not _admin_authorized(request):
         return PlainTextResponse("Unauthorized", status_code=401)
+    order = get_admin_order(order_id)
+    if not order:
+        return PlainTextResponse("Order not found", status_code=404)
+    locked_statuses = {"OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"}
+    if str(order.get("status", "")).upper() in locked_statuses:
+        return PlainTextResponse("Delivery assignment is locked for this order status", status_code=409)
+
     result = assign_delivery_person(order_id, payload.delivery_person_name, payload.delivery_person_phone)
     if not result:
         return PlainTextResponse("Order not found", status_code=404)
