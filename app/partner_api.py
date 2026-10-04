@@ -603,6 +603,17 @@ def partner_ai_assistant(
             .limit(20)
             .all()
         )
+        entries = (
+            db.query(DeliveryPayoutLedgerModel)
+            .filter(DeliveryPayoutLedgerModel.partner_phone == partner.phone)
+            .order_by(DeliveryPayoutLedgerModel.created_at.desc())
+            .limit(100)
+            .all()
+        )
+        earned = sum(entry.payout_amount for entry in entries)
+        pending = sum(entry.payout_amount for entry in entries if entry.status == "PENDING")
+        paid = sum(entry.payout_amount for entry in entries if entry.status == "PAID")
+        cod = sum(entry.cod_amount for entry in entries)
         snapshot = {
             "partner_name": partner.name,
             "deliveries": [
@@ -616,6 +627,24 @@ def partner_ai_assistant(
                 }
                 for order in orders
             ],
+            "earnings": {
+                "currency": "INR",
+                "earned_amount": earned,
+                "pending_payout": pending,
+                "paid_amount": paid,
+                "cod_reconciliation_amount": cod,
+                "payout_schedule": "WEEKLY",
+                "entries": [
+                    {
+                        "order_id": entry.order_id,
+                        "payout_amount": entry.payout_amount,
+                        "cod_amount": entry.cod_amount,
+                        "status": entry.status,
+                        "created_at": entry.created_at.isoformat(),
+                    }
+                    for entry in entries
+                ],
+            },
         }
     finally:
         db.close()
