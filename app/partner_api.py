@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from app.db import SessionLocal
+from app.admin_auth import is_admin_session
 from app.models import (
     DeliveryPartnerModel,
     DeliveryPartnerSessionModel,
@@ -444,7 +445,12 @@ def _settle_payout_entry(entry: DeliveryPayoutLedgerModel) -> bool:
 
 def _admin_authorized(request: Request) -> bool:
     configured = os.getenv("ADMIN_API_TOKEN")
-    return bool(configured) and hmac.compare_digest(request.headers.get("X-Admin-Token", ""), configured)
+    if configured and hmac.compare_digest(request.headers.get("X-Admin-Token", ""), configured):
+        return True
+    authorization = request.headers.get("Authorization", "")
+    if authorization.lower().startswith("bearer "):
+        return is_admin_session(authorization.split(" ", 1)[1].strip())
+    return False
 
 
 @router.get("/admin/payouts")
