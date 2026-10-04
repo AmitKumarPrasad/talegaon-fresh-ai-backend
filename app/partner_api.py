@@ -22,6 +22,11 @@ from app.pin_auth import _pin_hash, _pin_matches
 
 router = APIRouter(prefix="/partner", tags=["delivery-partner"])
 
+
+def _delivery_otp_hash(otp: str) -> str:
+    secret = os.getenv("JWT_SECRET", "development-jwt-secret-change-me")
+    return hashlib.sha256(f"{secret}:{otp}".encode()).hexdigest()
+
 ACCESS_TOKEN_MINUTES = 30
 REFRESH_TOKEN_DAYS = 30
 DELIVERY_STATUSES = {"ASSIGNED", "ACCEPTED", "PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED"}
@@ -259,11 +264,56 @@ def partner_update_status(
             if not transition_order(order_id, "OUT_FOR_DELIVERY"):
                 raise HTTPException(status_code=409, detail="Order status cannot move to OUT_FOR_DELIVERY")
         if requested == "DELIVERED":
-            if order.status != "OUT_FOR_DELIVERY":
-                raise HTTPException(status_code=409, detail="Order is not out for delivery")
-            if not transition_order(order_id, "DELIVERED"):
-                raise HTTPException(status_code=409, detail="Order status cannot move to DELIVERED")
+            raise HTTPException(
+                status_code=400,
+                detail="Use /complete with the customer delivery OTP and COD confirmation",
+            )
         order.delivery_status = requested
+        db.commit()
+        return _order_dict(db, order)
+    finally:
+        db.close()
+
+
+class DeliveryCompletionRequest(BaseModel):
+    otp: str = Field(min_length=6, max_length=6)
+    cod_collected: bool = False
+
+
+@router.post("/orders/{order_id}/complete")
+def partner_complete_delivery(
+    order_id: int,
+    payload: DeliveryCompletionRequest,
+    partner: DeliveryPartnerModel = Depends(current_partner),
+):
+    db = SessionLocal()
+    try:
+        order = db.get(OrderModel, order_id)
+        if not order or order.delivery_person_phone != partner.phone:
+            raise HTTPException(status_code=404, detail="Assigned order not found")
+        if order.delivery_status != "OUT_FOR_DELIVERY" or order.status != "OUT_FOR_DELIVERY":
+            raise HTTPException(status_code=409, detail="Order is not out for delivery")
+        if order.payment_method == "COD" and not payload.cod_collected:
+            raise HTTPException(status_code=409, detail="Confirm COD collection before completion")
+        expires = order.delivery_otp_expires_at
+        if not order.delivery_otp_hash or not expires:
+            raise HTTPException(status_code=409, detail="Customer must generate a delivery OTP first")
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if expires <= datetime.now(timezone.utc):
+            raise HTTPException(status_code=410, detail="Delivery OTP expired")
+        if order.delivery_otp_attempts >= 5:
+            raise HTTPException(status_code=429, detail="Too many invalid delivery OTP attempts")
+        if not hmac.compare_digest(order.delivery_otp_hash, _delivery_otp_hash(payload.otp)):
+            order.delivery_otp_attempts += 1
+            db.commit()
+            raise HTTPException(status_code=401, detail="Invalid delivery OTP")
+        if not transition_order(order_id, "DELIVERED"):
+            raise HTTPException(status_code=409, detail="Order status cannot move to DELIVERED")
+        order.delivery_status = "DELIVERED"
+        order.delivery_otp_hash = None
+        order.delivery_otp_expires_at = None
+        order.delivery_otp_attempts = 0
         db.commit()
         return _order_dict(db, order)
     finally:

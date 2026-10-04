@@ -1,4 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import hashlib
+import secrets
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Header
@@ -34,6 +36,11 @@ from app.state import get_state
 from app.phone_utils import is_valid_indian_mobile
 
 router = APIRouter()
+
+
+def _delivery_otp_hash(otp: str) -> str:
+    secret = os.getenv("JWT_SECRET", "development-jwt-secret-change-me")
+    return hashlib.sha256(f"{secret}:{otp}".encode()).hexdigest()
 
 
 class OrderMessageRequest(BaseModel):
@@ -616,6 +623,25 @@ def get_order_tracking(order_id: int, customer: CustomerModel = Depends(current_
     if not tracking:
         raise HTTPException(status_code=404, detail="Order not found")
     return tracking
+
+
+@router.post("/customers/me/orders/{order_id}/delivery-otp")
+def create_delivery_otp(order_id: int, customer: CustomerModel = Depends(current_customer)):
+    db = SessionLocal()
+    try:
+        order = db.get(OrderModel, order_id)
+        if not order or order.customer_id != customer.phone:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if order.status != "OUT_FOR_DELIVERY" or order.delivery_status != "OUT_FOR_DELIVERY":
+            raise HTTPException(status_code=409, detail="Delivery OTP is available when the order is out for delivery")
+        otp = f"{secrets.randbelow(1_000_000):06d}"
+        order.delivery_otp_hash = _delivery_otp_hash(otp)
+        order.delivery_otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        order.delivery_otp_attempts = 0
+        db.commit()
+        return {"order_id": order_id, "expires_in_seconds": 900, "delivery_otp": otp}
+    finally:
+        db.close()
 
 
 @router.get("/customers/me/orders/{order_id}/messages")
