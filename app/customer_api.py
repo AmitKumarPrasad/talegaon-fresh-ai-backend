@@ -26,6 +26,7 @@ from app.models import (
     OrderModel,
     OrderStatusHistoryModel,
     ProductModel,
+    ProductRequestModel,
 )
 from app.order_details import customer_order_dict as _order_dict, get_customer_order, save_payment_link
 from app.payment_service import PaymentError, create_payment_link
@@ -659,3 +660,40 @@ def send_order_message(order_id: int, payload: OrderMessageRequest, customer: Cu
     if message is None:
         raise HTTPException(status_code=404, detail="Order not found")
     return message
+
+
+class ProductRequestPayload(BaseModel):
+    request_text: str = Field(min_length=2, max_length=1000)
+
+
+@router.post("/customers/me/orders/{order_id}/product-request")
+def submit_product_request(
+    order_id: int,
+    payload: ProductRequestPayload,
+    customer: CustomerModel = Depends(current_customer),
+):
+    order = get_customer_order(order_id, customer.phone)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if str(order.get("status", "")).upper() != "DELIVERED":
+        raise HTTPException(status_code=409, detail="Product requests are available after delivery")
+
+    db = SessionLocal()
+    try:
+        request = ProductRequestModel(
+            customer_id=customer.phone,
+            order_id=order_id,
+            request_text=payload.request_text.strip(),
+        )
+        db.add(request)
+        db.commit()
+        db.refresh(request)
+        return {
+            "id": request.id,
+            "order_id": request.order_id,
+            "request_text": request.request_text,
+            "status": request.status,
+            "created_at": request.created_at,
+        }
+    finally:
+        db.close()
