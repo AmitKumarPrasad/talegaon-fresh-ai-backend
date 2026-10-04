@@ -989,3 +989,36 @@ def _customer_for_order(order_id: int) -> str:
         return order.customer_id if order else ""
     finally:
         db.close()
+
+
+@app.get("/admin/product-requests")
+async def admin_product_requests(request: Request, limit: int = 100):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    from app.db import SessionLocal
+    from app.models import ProductRequestModel
+
+    db = SessionLocal()
+    try:
+        safe_limit = max(1, min(limit, 200))
+        rows = (
+            db.query(ProductRequestModel)
+            .order_by(ProductRequestModel.created_at.desc())
+            .limit(safe_limit)
+            .all()
+        )
+        return {
+            "requests": [
+                {
+                    "id": row.id,
+                    "customer_id": row.customer_id,
+                    "order_id": row.order_id,
+                    "request_text": row.request_text,
+                    "status": row.status,
+                    "created_at": row.created_at,
+                }
+                for row in rows
+            ]
+        }
+    finally:
+        db.close()
