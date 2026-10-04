@@ -24,8 +24,9 @@ def _ub64(value: str) -> bytes:
 
 
 def create_admin_session(admin_token: str) -> str:
-    configured = os.getenv("ADMIN_API_TOKEN")
-    if not configured or not hmac.compare_digest(admin_token, configured):
+    configured = (os.getenv("ADMIN_API_TOKEN") or "").strip()
+    provided = admin_token.strip()
+    if not configured or not hmac.compare_digest(provided, configured):
         raise HTTPException(status_code=401, detail="Invalid admin credentials")
     now = datetime.now(timezone.utc)
     header = _b64(b'{"alg":"HS256","typ":"JWT"}')
