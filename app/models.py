@@ -83,6 +83,16 @@ class OrderMessageModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
 
+class ProductRequestModel(Base):
+    __tablename__ = "product_requests"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.phone"), index=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
+    request_text: Mapped[str] = mapped_column(String(1000), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="NEW", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
 class ProcessedWebhookModel(Base):
     __tablename__ = "processed_webhooks"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
