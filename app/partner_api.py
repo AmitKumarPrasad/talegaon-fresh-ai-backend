@@ -56,6 +56,10 @@ class PartnerRefreshRequest(BaseModel):
     device_id: str = Field(min_length=16, max_length=200)
 
 
+class PartnerLogoutRequest(BaseModel):
+    device_id: str = Field(min_length=16, max_length=200)
+
+
 class PartnerProvisionRequest(BaseModel):
     phone: str = Field(min_length=7, max_length=30)
     name: str = Field(min_length=1, max_length=100)
@@ -191,6 +195,32 @@ def partner_refresh(payload: PartnerRefreshRequest):
         return result
     finally:
         db.close()
+
+
+@router.post("/auth/logout")
+def partner_logout(
+    payload: PartnerLogoutRequest,
+    authorization: str | None = Header(default=None),
+):
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Partner authentication required")
+    data = _decode(authorization.split(" ", 1)[1].strip())
+    db = SessionLocal()
+    try:
+        sessions = db.query(DeliveryPartnerSessionModel).filter(
+            DeliveryPartnerSessionModel.partner_phone == data["sub"],
+            DeliveryPartnerSessionModel.device_id == payload.device_id,
+            DeliveryPartnerSessionModel.revoked_at.is_(None),
+        ).all()
+        revoked_at = datetime.now(timezone.utc)
+        for session in sessions:
+            session.revoked_at = revoked_at
+        db.commit()
+        return {"revoked_sessions": len(sessions)}
+    finally:
+        db.close()
+
+
 
 
 @router.get("/me")
