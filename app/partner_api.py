@@ -417,6 +417,51 @@ def _admin_authorized(request: Request) -> bool:
     return bool(configured) and hmac.compare_digest(request.headers.get("X-Admin-Token", ""), configured)
 
 
+@router.get("/admin/payouts")
+def admin_payouts(
+    request: Request,
+    status: str | None = None,
+    partner_phone: str | None = None,
+):
+    if not _admin_authorized(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    normalized_status = status.upper() if status else None
+    if normalized_status and normalized_status not in {"PENDING", "PAID"}:
+        raise HTTPException(status_code=400, detail="Status must be PENDING or PAID")
+    db = SessionLocal()
+    try:
+        query = db.query(DeliveryPayoutLedgerModel)
+        if normalized_status:
+            query = query.filter(DeliveryPayoutLedgerModel.status == normalized_status)
+        if partner_phone:
+            query = query.filter(DeliveryPayoutLedgerModel.partner_phone == partner_phone.strip())
+        entries = query.order_by(DeliveryPayoutLedgerModel.created_at.desc()).all()
+        return {
+            "currency": "INR",
+            "payout_schedule": "WEEKLY",
+            "total_payout": sum(entry.payout_amount for entry in entries),
+            "pending_payout": sum(entry.payout_amount for entry in entries if entry.status == "PENDING"),
+            "paid_payout": sum(entry.payout_amount for entry in entries if entry.status == "PAID"),
+            "cod_reconciliation_amount": sum(entry.cod_amount for entry in entries),
+            "entries": [
+                {
+                    "id": entry.id,
+                    "order_id": entry.order_id,
+                    "partner_phone": entry.partner_phone,
+                    "payout_amount": entry.payout_amount,
+                    "cod_amount": entry.cod_amount,
+                    "status": entry.status,
+                    "created_at": entry.created_at.isoformat(),
+                    "paid_at": entry.paid_at.isoformat() if entry.paid_at else None,
+                }
+                for entry in entries
+            ],
+        }
+    finally:
+        db.close()
+
+
+
 @router.post("/admin/payouts/{ledger_id}/mark-paid")
 def mark_partner_payout_paid(ledger_id: int, request: Request):
     if not _admin_authorized(request):
