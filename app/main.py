@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.admin_orders import get_admin_order, list_orders
 from app.admin_dashboard import get_dashboard_summary
-from app.admin_auth import create_admin_session
+from app.admin_auth import create_admin_session, is_admin_session
 from app.customer_api import router as customer_router
 from app.partner_api import router as partner_router
 from app.catalog import product_menu
@@ -238,8 +238,15 @@ class BulkPriceUpdateRequest(BaseModel):
 
 
 def _admin_authorized(request: Request) -> bool:
+    """Accept the legacy admin token and the short-lived admin session."""
     configured = os.getenv("ADMIN_API_TOKEN")
-    return bool(configured) and hmac.compare_digest(request.headers.get("X-Admin-Token", ""), configured)
+    legacy_token = request.headers.get("X-Admin-Token", "")
+    if configured and hmac.compare_digest(legacy_token, configured):
+        return True
+
+    authorization = request.headers.get("Authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    return scheme.lower() == "bearer" and is_admin_session(token.strip())
 
 
 @app.get("/admin/dashboard")
