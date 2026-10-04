@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, text
 import pytest
 
 
-@pytest.mark.parametrize("target, expected_count", [("0015", 44), ("head", 66)])
+@pytest.mark.parametrize("target, expected_count", [("0015", 44), ("head", 74)])
 def test_catalog_migration_preserves_existing_business_data(tmp_path, target, expected_count):
     url = f"sqlite:///{tmp_path / 'catalog.db'}"
     env = {**os.environ, "DATABASE_URL": url}

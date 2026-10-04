@@ -11,7 +11,7 @@ from app.models import ProductModel
 CATALOG_REFERENCES = json.loads(
     Path(__file__).with_name("catalog_references.json").read_text()
 )
-SEED_PRICES = {'Tomato': 40, 'Potato': 60, 'Onion': 40, 'Carrot': 50, 'Capsicum': 70, 'Cabbage': 30, 'Cauliflower': 40, 'Ladyfinger': 60, 'Green Beans': 80, 'Spinach': 30, 'Coriander': 20, 'Green Chilli': 30, 'Ginger': 40, 'Garlic': 50, 'Banana': 90, 'Apple': 220, 'Orange': 90, 'Grapes': 100, 'Pomegranate': 140, 'Papaya': 60}
+SEED_PRICES = {'Tomato': 40, 'Potato': 60, 'Onion': 40, 'Carrot': 50, 'Capsicum': 70, 'Cabbage': 30, 'Cauliflower': 40, 'Ladyfinger': 60, 'Green Beans': 80, 'Spinach': 30, 'Coriander': 20, 'Green Chilli': 30, 'Ginger': 40, 'Garlic': 50, 'Cut Potato': 45, 'Cut Onion': 45, 'Cut Carrot': 35, 'Cut Green Beans': 45, 'Cut Cabbage': 40, 'Cut Cauliflower': 50, 'Cut Mixed Vegetables': 70, 'Cut Bottle Gourd': 40, 'Banana': 90, 'Apple': 220, 'Orange': 90, 'Grapes': 100, 'Pomegranate': 140, 'Papaya': 60}
 SEED_PRICES.update({item["name"]: item["price"] for item in CATALOG_REFERENCES})
 # Sugar uses bb Popular as a price benchmark only, not a branded product photo.
 SEED_IMAGES = {item["name"]: item["image_url"] for item in CATALOG_REFERENCES

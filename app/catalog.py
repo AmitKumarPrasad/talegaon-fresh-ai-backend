@@ -76,6 +76,14 @@ PRODUCTS = [
     Product(64, "Happilo Premium Whole Cashews", "200 g", "Dry Fruits"),
     Product(65, "bb Popular Indian Raisins", "200 g", "Dry Fruits"),
     Product(66, "Happilo Premium International Queen Kalmi Dates", "200 g", "Dry Fruits"),
+    Product(67, "Cut Potato", "500 g", "Ready-to-Cook"),
+    Product(68, "Cut Onion", "500 g", "Ready-to-Cook"),
+    Product(69, "Cut Carrot", "250 g", "Ready-to-Cook"),
+    Product(70, "Cut Green Beans", "250 g", "Ready-to-Cook"),
+    Product(71, "Cut Cabbage", "500 g", "Ready-to-Cook"),
+    Product(72, "Cut Cauliflower", "500 g", "Ready-to-Cook"),
+    Product(73, "Cut Mixed Vegetables", "500 g", "Ready-to-Cook"),
+    Product(74, "Cut Bottle Gourd", "500 g", "Ready-to-Cook"),
 ]
 
 
