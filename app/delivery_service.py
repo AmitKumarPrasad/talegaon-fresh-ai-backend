@@ -20,8 +20,10 @@ def _order_dict(order: OrderModel) -> dict:
     return {
         "order_id": order.id,
         "status": order.status,
+        "delivery_status": order.delivery_status,
         "address": order.address,
         "delivery_person_name": order.delivery_person_name,
+        "delivery_person_phone": order.delivery_person_phone,
         "delivery_lat": order.delivery_lat,
         "delivery_lng": order.delivery_lng,
         "delivery_location_updated_at": (
