@@ -402,9 +402,46 @@ def partner_earnings(partner: DeliveryPartnerModel = Depends(current_partner)):
         db.close()
 
 
+def _settle_payout_entry(entry: DeliveryPayoutLedgerModel) -> bool:
+    if entry.status == "PAID":
+        return False
+    if entry.status != "PENDING":
+        raise ValueError("Only pending payouts can be marked paid")
+    entry.status = "PAID"
+    entry.paid_at = datetime.now(timezone.utc)
+    return True
+
+
 def _admin_authorized(request: Request) -> bool:
     configured = os.getenv("ADMIN_API_TOKEN")
     return bool(configured) and hmac.compare_digest(request.headers.get("X-Admin-Token", ""), configured)
+
+
+@router.post("/admin/payouts/{ledger_id}/mark-paid")
+def mark_partner_payout_paid(ledger_id: int, request: Request):
+    if not _admin_authorized(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    db = SessionLocal()
+    try:
+        entry = db.get(DeliveryPayoutLedgerModel, ledger_id)
+        if not entry:
+            raise HTTPException(status_code=404, detail="Payout ledger entry not found")
+        try:
+            _settle_payout_entry(entry)
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error))
+        db.commit()
+        return {
+            "id": entry.id,
+            "order_id": entry.order_id,
+            "partner_phone": entry.partner_phone,
+            "payout_amount": entry.payout_amount,
+            "cod_amount": entry.cod_amount,
+            "status": entry.status,
+            "paid_at": entry.paid_at.isoformat() if entry.paid_at else None,
+        }
+    finally:
+        db.close()
 
 
 @router.post("/admin/partners")
