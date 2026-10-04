@@ -20,6 +20,7 @@ def _order_dict(order: OrderModel) -> dict:
     return {
         "order_id": order.id,
         "status": order.status,
+        "delivery_status": getattr(order, "delivery_status", None),
         "address": order.address,
         "delivery_person_name": order.delivery_person_name,
         "delivery_lat": order.delivery_lat,
