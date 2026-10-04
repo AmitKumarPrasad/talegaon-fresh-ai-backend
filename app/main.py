@@ -27,7 +27,7 @@ from app.delivery_service import (
     update_delivery_location,
 )
 from app.menu import MENU
-from app.openai_service import generate_reply
+from app.openai_service import generate_admin_reply, generate_reply
 from app.order_details import (
     confirm_upi_payment,
     get_customer_order,
@@ -1022,3 +1022,37 @@ async def admin_product_requests(request: Request, limit: int = 100):
         }
     finally:
         db.close()
+
+
+class AdminAiRequest(BaseModel):
+    question: str = Field(min_length=2, max_length=1000)
+
+
+@app.post("/admin/ai/copilot")
+async def admin_ai_copilot(payload: AdminAiRequest, request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+
+    dashboard = get_dashboard_summary()
+    orders = list_orders(limit=50)
+    inventory = list_inventory()
+    snapshot = {
+        "dashboard": dashboard,
+        "orders": [
+            {
+                "order_id": item.get("order_id"),
+                "status": item.get("status"),
+                "total": item.get("total"),
+                "payment_method": item.get("payment_method"),
+                "item_count": len(item.get("items") or []),
+            }
+            for item in orders
+        ],
+        "inventory": inventory,
+    }
+    try:
+        reply = generate_admin_reply(payload.question, snapshot)
+    except Exception:
+        logger.exception("Admin Copilot failed")
+        return PlainTextResponse("Admin Copilot is temporarily unavailable.", status_code=503)
+    return {"reply": reply}

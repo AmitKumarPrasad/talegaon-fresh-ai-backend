@@ -56,3 +56,35 @@ def generate_mobile_reply(message: str) -> str:
         input=message,
     )
     return response.output_text
+
+
+ADMIN_SYSTEM_INSTRUCTIONS = """You are the FRESHORA Store Admin Copilot.
+Help the store owner understand their current business data using only the supplied backend snapshot.
+
+Rules:
+- Be concise, practical, and friendly.
+- Understand English, Hindi, Hinglish, and Marathi.
+- Never invent revenue, order counts, stock, partner details, or dates.
+- If the snapshot does not contain the answer, say that clearly.
+- You are read-only: never claim to change an order, price, stock, payout, or partner.
+- For any change request, tell the admin to use the corresponding Admin screen and confirm manually.
+- Do not reveal customer addresses, tokens, secrets, or internal implementation details.
+"""
+
+
+def generate_admin_reply(question: str, snapshot: dict) -> str:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return "The Admin Copilot is not configured yet. Please set OPENAI_API_KEY on the backend."
+
+    client = OpenAI(api_key=api_key)
+    response = client.responses.create(
+        model=MODEL,
+        instructions=ADMIN_SYSTEM_INSTRUCTIONS,
+        input=[
+            {"role": "user", "content": [
+                {"type": "input_text", "text": f"Question: {question.strip()}\\n\\nBackend snapshot (read-only): {snapshot}"}
+            ]}
+        ],
+    )
+    return response.output_text
