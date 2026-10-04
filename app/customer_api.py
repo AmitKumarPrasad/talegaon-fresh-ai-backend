@@ -625,6 +625,7 @@ def get_order_tracking(order_id: int, customer: CustomerModel = Depends(current_
     return tracking
 
 
+@router.post("/customers/me/orders/{order_id}/delivery-code")
 @router.post("/customers/me/orders/{order_id}/delivery-otp")
 def create_delivery_otp(order_id: int, customer: CustomerModel = Depends(current_customer)):
     db = SessionLocal()
