@@ -235,7 +235,7 @@ def _order_dict(db, order: OrderModel) -> dict:
     return {
         "order_id": order.id,
         "status": order.status,
-        "delivery_status": order.delivery_status,
+        "delivery_status": ("CANCELLED" if order.status == "CANCELLED" else order.delivery_status),
         "address": order.address,
         "total": order.total,
         "payment_method": order.payment_method,
@@ -290,6 +290,8 @@ def partner_update_location(
         order = db.get(OrderModel, order_id)
         if not order or order.delivery_person_phone != partner.phone:
             raise HTTPException(status_code=404, detail="Assigned order not found")
+        if order.status == "CANCELLED":
+            raise HTTPException(status_code=409, detail="Order was cancelled by the customer")
         if order.status != "OUT_FOR_DELIVERY" or order.delivery_status != "OUT_FOR_DELIVERY":
             raise HTTPException(status_code=409, detail="Location updates are available only while out for delivery")
         order.delivery_lat = payload.lat
@@ -315,6 +317,8 @@ def partner_update_status(
         order = db.get(OrderModel, order_id)
         if not order or order.delivery_person_phone != partner.phone:
             raise HTTPException(status_code=404, detail="Assigned order not found")
+        if order.status == "CANCELLED":
+            raise HTTPException(status_code=409, detail="Order was cancelled by the customer")
         current = (order.delivery_status or "ASSIGNED").upper()
         if requested not in DELIVERY_TRANSITIONS.get(current, set()):
             raise HTTPException(status_code=409, detail=f"Invalid delivery transition from {current} to {requested}")
@@ -351,6 +355,8 @@ def partner_complete_delivery(
         order = db.get(OrderModel, order_id)
         if not order or order.delivery_person_phone != partner.phone:
             raise HTTPException(status_code=404, detail="Assigned order not found")
+        if order.status == "CANCELLED":
+            raise HTTPException(status_code=409, detail="Order was cancelled by the customer")
         if order.delivery_status != "OUT_FOR_DELIVERY" or order.status != "OUT_FOR_DELIVERY":
             raise HTTPException(status_code=409, detail="Order is not out for delivery")
         if order.payment_method == "COD" and not payload.cod_collected:
