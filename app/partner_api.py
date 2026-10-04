@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from app.db import SessionLocal
+from app.admin_auth import is_admin_session
 from app.models import (
     DeliveryPartnerModel,
     DeliveryPartnerSessionModel,
@@ -444,7 +445,12 @@ def _settle_payout_entry(entry: DeliveryPayoutLedgerModel) -> bool:
 
 def _admin_authorized(request: Request) -> bool:
     configured = os.getenv("ADMIN_API_TOKEN")
-    return bool(configured) and hmac.compare_digest(request.headers.get("X-Admin-Token", ""), configured)
+    if configured and hmac.compare_digest(request.headers.get("X-Admin-Token", ""), configured):
+        return True
+    authorization = request.headers.get("Authorization", "")
+    if authorization.lower().startswith("bearer "):
+        return is_admin_session(authorization.split(" ", 1)[1].strip())
+    return False
 
 
 @router.get("/admin/payouts")
@@ -540,6 +546,48 @@ def provision_partner(payload: PartnerProvisionRequest, request: Request):
                 active=True,
             )
             db.add(partner)
+        db.commit()
+        return {"phone": partner.phone, "name": partner.name, "active": partner.active}
+    finally:
+        db.close()
+
+
+@router.get("/admin/partners")
+def list_admin_partners(request: Request):
+    if not _admin_authorized(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    db = SessionLocal()
+    try:
+        partners = db.query(DeliveryPartnerModel).order_by(DeliveryPartnerModel.created_at.desc()).all()
+        return {
+            "partners": [
+                {
+                    "phone": partner.phone,
+                    "name": partner.name,
+                    "active": partner.active,
+                    "created_at": partner.created_at.isoformat(),
+                }
+                for partner in partners
+            ]
+        }
+    finally:
+        db.close()
+
+
+class PartnerActiveRequest(BaseModel):
+    active: bool
+
+
+@router.patch("/admin/partners/{phone}")
+def update_partner_active(phone: str, payload: PartnerActiveRequest, request: Request):
+    if not _admin_authorized(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    db = SessionLocal()
+    try:
+        partner = db.get(DeliveryPartnerModel, phone.strip())
+        if not partner:
+            raise HTTPException(status_code=404, detail="Partner not found")
+        partner.active = payload.active
         db.commit()
         return {"phone": partner.phone, "name": partner.name, "active": partner.active}
     finally:
