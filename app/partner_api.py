@@ -21,6 +21,7 @@ from app.models import (
 from app.order_status import transition_order
 from app.phone_utils import is_valid_indian_mobile
 from app.pin_auth import _pin_hash, _pin_matches
+from app.openai_service import generate_partner_reply
 
 router = APIRouter(prefix="/partner", tags=["delivery-partner"])
 
@@ -582,3 +583,45 @@ def update_partner_active(phone: str, payload: PartnerActiveRequest, request: Re
         return {"phone": partner.phone, "name": partner.name, "active": partner.active}
     finally:
         db.close()
+
+
+class PartnerAiRequest(BaseModel):
+    question: str = Field(min_length=2, max_length=1000)
+
+
+@router.post("/ai/assistant")
+def partner_ai_assistant(
+    payload: PartnerAiRequest,
+    partner: DeliveryPartnerModel = Depends(current_partner),
+):
+    db = SessionLocal()
+    try:
+        orders = (
+            db.query(OrderModel)
+            .filter(OrderModel.delivery_person_phone == partner.phone)
+            .order_by(OrderModel.id.desc())
+            .limit(20)
+            .all()
+        )
+        snapshot = {
+            "partner_name": partner.name,
+            "deliveries": [
+                {
+                    "order_id": order.id,
+                    "status": order.status,
+                    "delivery_status": order.delivery_status,
+                    "address": order.address,
+                    "total": order.total,
+                    "payment_method": order.payment_method,
+                }
+                for order in orders
+            ],
+        }
+    finally:
+        db.close()
+
+    try:
+        reply = generate_partner_reply(payload.question, snapshot)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Delivery Partner Assistant is temporarily unavailable")
+    return {"reply": reply}
