@@ -16,6 +16,7 @@ def _serialize_order(order: OrderModel, items: list[OrderItemModel]) -> dict:
     return {
         "order_id": order.id,
         "customer_id": order.customer_id,
+        "created_at": order.created_at.isoformat() if order.created_at else None,
         "status": order.status,
         "allowed_next_statuses": sorted(get_allowed_transitions(order.status)),
         "total": order.total,
