@@ -239,13 +239,7 @@ class BulkPriceUpdateRequest(BaseModel):
 
 def _admin_authorized(request: Request) -> bool:
     configured = os.getenv("ADMIN_API_TOKEN")
-    if configured and hmac.compare_digest(request.headers.get("X-Admin-Token", ""), configured):
-        return True
-    authorization = request.headers.get("Authorization", "")
-    if authorization.lower().startswith("bearer "):
-        from app.admin_auth import is_admin_session
-        return is_admin_session(authorization.split(" ", 1)[1].strip())
-    return False
+    return bool(configured) and hmac.compare_digest(request.headers.get("X-Admin-Token", ""), configured)
 
 
 @app.get("/admin/dashboard")
