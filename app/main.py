@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from app.admin_orders import get_admin_order, list_orders
 from app.admin_dashboard import get_dashboard_summary
 from app.customer_api import router as customer_router
+from app.partner_api import router as partner_router
 from app.catalog import product_menu
 from app.config import get_cors_allowed_origins, is_production_environment, validate_production_config
 from app.delivery_service import (
@@ -127,6 +128,7 @@ async def security_headers(request: Request, call_next):
 
 
 app.include_router(customer_router)
+app.include_router(partner_router)
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN")
 WHATSAPP_APP_SECRET = os.getenv("WHATSAPP_APP_SECRET")
 validate_production_config()

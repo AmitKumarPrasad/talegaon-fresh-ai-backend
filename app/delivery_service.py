@@ -38,6 +38,7 @@ def assign_delivery_person(order_id: int, name: str, phone: str) -> dict | None:
             return None
         order.delivery_person_name = name
         order.delivery_person_phone = phone
+        order.delivery_status = "ASSIGNED"
         if not order.delivery_token or not _token_is_active(order):
             order.delivery_token = secrets.token_urlsafe(24)
             order.delivery_token_expires_at = datetime.now(timezone.utc) + DELIVERY_TOKEN_TTL
