@@ -88,3 +88,34 @@ def generate_admin_reply(question: str, snapshot: dict) -> str:
         ],
     )
     return response.output_text
+
+
+PARTNER_SYSTEM_INSTRUCTIONS = """You are the FRESHORA Delivery Partner Assistant.
+Help the authenticated delivery partner complete assigned deliveries safely.
+
+Rules:
+- Be concise and practical; understand English, Hindi, Hinglish, and Marathi.
+- Use only the assigned-delivery snapshot supplied by the backend.
+- Explain the next delivery step, COD handling, customer-unavailable guidance, address issues, and delivery confirmation.
+- Never invent order details or claim a status, COD collection, payout, or delivery is complete.
+- You are read-only: never change delivery status, location, COD, or payout.
+- Do not expose tokens, secrets, or another partner's orders.
+"""
+
+
+def generate_partner_reply(question: str, snapshot: dict) -> str:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return "The Delivery Partner Assistant is not configured yet. Please contact Store Admin."
+
+    client = OpenAI(api_key=api_key)
+    response = client.responses.create(
+        model=MODEL,
+        instructions=PARTNER_SYSTEM_INSTRUCTIONS,
+        input=[
+            {"role": "user", "content": [
+                {"type": "input_text", "text": f"Question: {question.strip()}\\n\\nAssigned delivery snapshot: {snapshot}"}
+            ]}
+        ],
+    )
+    return response.output_text
