@@ -1,14 +1,14 @@
 """delivery partner accounts and delivery lifecycle
 
 Revision ID: 0019_delivery_partner
-Revises: 0018_eggs_and_dry_fruits
+Revises: 0018
 """
 
 from alembic import op
 import sqlalchemy as sa
 
 revision = "0019_delivery_partner"
-down_revision = "0018_eggs_and_dry_fruits"
+down_revision = "0018"
 branch_labels = None
 depends_on = None
 
@@ -34,7 +34,12 @@ def upgrade() -> None:
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.create_index("ix_delivery_partner_sessions_partner_phone", "delivery_partner_sessions", ["partner_phone"])
-    op.create_index("ix_delivery_partner_sessions_refresh_token_hash", "delivery_partner_sessions", ["refresh_token_hash"], unique=True)
+    op.create_index(
+        "ix_delivery_partner_sessions_refresh_token_hash",
+        "delivery_partner_sessions",
+        ["refresh_token_hash"],
+        unique=True,
+    )
 
 
 def downgrade() -> None:
