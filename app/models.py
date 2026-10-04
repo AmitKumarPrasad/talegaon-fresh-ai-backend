@@ -44,6 +44,7 @@ class OrderModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     delivery_person_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     delivery_person_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    delivery_status: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
     delivery_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
     delivery_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     delivery_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -125,3 +126,22 @@ class AddressModel(Base):
     city: Mapped[str] = mapped_column(String(100))
     pincode: Mapped[str] = mapped_column(String(6))
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class DeliveryPartnerModel(Base):
+    __tablename__ = "delivery_partners"
+    phone: Mapped[str] = mapped_column(String(30), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    pin_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
+class DeliveryPartnerSessionModel(Base):
+    __tablename__ = "delivery_partner_sessions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    partner_phone: Mapped[str] = mapped_column(ForeignKey("delivery_partners.phone"), index=True)
+    device_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    refresh_token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
