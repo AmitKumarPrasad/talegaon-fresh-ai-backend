@@ -592,3 +592,4 @@ def update_partner_active(phone: str, payload: PartnerActiveRequest, request: Re
         return {"phone": partner.phone, "name": partner.name, "active": partner.active}
     finally:
         db.close()
+    
