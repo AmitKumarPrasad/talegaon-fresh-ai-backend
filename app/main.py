@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.admin_orders import get_admin_order, list_orders
 from app.admin_dashboard import get_dashboard_summary
+from app.admin_auth import create_admin_session, is_admin_session
 from app.customer_api import router as customer_router
 from app.partner_api import router as partner_router
 from app.catalog import product_menu
@@ -194,6 +195,19 @@ async def verify_webhook(request: Request):
 
 
 
+class AdminSessionRequest(BaseModel):
+    admin_token: str = Field(min_length=1, max_length=500)
+
+
+@app.post("/admin/session")
+def admin_session(payload: AdminSessionRequest) -> dict:
+    return {
+        "access_token": create_admin_session(payload.admin_token),
+        "expires_in": 3600,
+        "token_type": "bearer",
+    }
+
+
 class PriceUpdateRequest(BaseModel):
     price: float = Field(gt=0)
     in_stock: bool | None = None
@@ -225,7 +239,12 @@ class BulkPriceUpdateRequest(BaseModel):
 
 def _admin_authorized(request: Request) -> bool:
     configured = os.getenv("ADMIN_API_TOKEN")
-    return bool(configured) and hmac.compare_digest(request.headers.get("X-Admin-Token", ""), configured)
+    if configured and hmac.compare_digest(request.headers.get("X-Admin-Token", ""), configured):
+        return True
+    authorization = request.headers.get("Authorization", "")
+    if authorization.lower().startswith("bearer "):
+        return is_admin_session(authorization.split(" ", 1)[1].strip())
+    return False
 
 
 @app.get("/admin/dashboard")
