@@ -376,7 +376,9 @@ def partner_complete_delivery(
         if not hmac.compare_digest(order.delivery_otp_hash, _delivery_otp_hash(payload.otp)):
             order.delivery_otp_attempts += 1
             db.commit()
-            raise HTTPException(status_code=401, detail="Invalid delivery OTP")
+            # 401 is reserved for partner session authentication. Clients retry
+            # it after refreshing, which would count one wrong OTP twice.
+            raise HTTPException(status_code=400, detail="Invalid delivery OTP")
         if not transition_order(order_id, "DELIVERED"):
             raise HTTPException(status_code=409, detail="Order status cannot move to DELIVERED")
         order.delivery_status = "DELIVERED"
