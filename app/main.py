@@ -19,6 +19,8 @@ from app.customer_api import router as customer_router
 from app.partner_api import router as partner_router
 from app.catalog import product_menu
 from app.config import get_cors_allowed_origins, is_production_environment, validate_production_config
+from app.db import SessionLocal
+from app.models import OrderModel
 from app.delivery_service import (
     add_message_by_delivery,
     assign_delivery_person,
@@ -414,6 +416,14 @@ class AssignDeliveryRequest(BaseModel):
     delivery_person_phone: str = Field(min_length=7, max_length=30)
 
 
+class AssignDeliveryBatchRequest(BaseModel):
+    order_ids: list[int] = Field(min_length=2, max_length=3)
+    delivery_person_name: str = Field(min_length=1, max_length=100)
+    delivery_person_phone: str = Field(min_length=7, max_length=30)
+    distance_km: float = Field(default=0, ge=0, le=100)
+    incentive_amount: float = Field(default=0, ge=0, le=10000)
+
+
 @app.patch("/admin/orders/{order_id}/delivery")
 async def admin_assign_delivery(order_id: int, payload: AssignDeliveryRequest, request: Request):
     if not _admin_authorized(request):
@@ -440,6 +450,51 @@ async def admin_assign_delivery(order_id: int, payload: AssignDeliveryRequest, r
         logger.exception("Failed to notify delivery person for order_id=%s", order_id)
     result.pop("delivery_token", None)
     return {**result, "delivery_link": delivery_link}
+
+
+@app.post("/admin/orders/delivery-batch")
+async def admin_assign_delivery_batch(payload: AssignDeliveryBatchRequest, request: Request):
+    if not _admin_authorized(request):
+        return PlainTextResponse("Unauthorized", status_code=401)
+    if os.getenv("DELIVERY_MULTI_ORDER_ENABLED", "false").strip().lower() != "true":
+        return PlainTextResponse("Multi-order delivery is disabled during partner training", status_code=409)
+    if len(set(payload.order_ids)) != len(payload.order_ids):
+        return PlainTextResponse("Each order ID must be unique", status_code=400)
+
+    orders = []
+    for order_id in payload.order_ids:
+        order = get_admin_order(order_id)
+        if not order:
+            return PlainTextResponse(f"Order {order_id} not found", status_code=404)
+        if str(order.get("status", "")).upper() in {"OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"}:
+            return PlainTextResponse(f"Order {order_id} cannot be assigned in its current status", status_code=409)
+        orders.append(order)
+
+    batch_id = f"batch-{uuid.uuid4().hex[:16]}"
+    results = []
+    for sequence, order in enumerate(orders, start=1):
+        result = assign_delivery_person(order["order_id"], payload.delivery_person_name, payload.delivery_person_phone)
+        if not result:
+            return PlainTextResponse(f"Order {order['order_id']} could not be assigned", status_code=409)
+        db = SessionLocal()
+        try:
+            row = db.get(OrderModel, order["order_id"])
+            row.delivery_batch_id = batch_id
+            row.delivery_sequence = sequence
+            row.delivery_distance_km = payload.distance_km
+            row.delivery_incentive = payload.incentive_amount
+            db.commit()
+        finally:
+            db.close()
+        result.pop("delivery_token", None)
+        results.append({**result, "batch_id": batch_id, "batch_sequence": sequence})
+
+    return {
+        "batch_id": batch_id,
+        "order_count": len(results),
+        "max_orders": int(os.getenv("DELIVERY_MAX_BATCH_ORDERS", "3")),
+        "orders": results,
+    }
 
 
 @app.patch("/admin/orders/{order_id}/status")

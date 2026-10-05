@@ -240,6 +240,9 @@ def _order_dict(db, order: OrderModel) -> dict:
         "total": order.total,
         "payment_method": order.payment_method,
         "cod_amount": order.total if order.payment_method == "COD" else 0,
+        "batch_id": order.delivery_batch_id or f"order-{order.id}",
+        "batch_sequence": order.delivery_sequence or 1,
+        "distance_km": round(max(order.delivery_distance_km or 0, 0), 2),
         "items": [
             {"name": item.product_name, "quantity": item.quantity, "unit_price": item.unit_price}
             for item in items
@@ -385,10 +388,21 @@ def partner_complete_delivery(
         if not db.query(DeliveryPayoutLedgerModel).filter(
             DeliveryPayoutLedgerModel.order_id == order.id
         ).first():
+            base_amount = max(float(os.getenv("DELIVERY_BASE_RATE", "25")), 0)
+            per_km_rate = max(float(os.getenv("DELIVERY_PER_KM_RATE", "8")), 0)
+            included_km = max(float(os.getenv("DELIVERY_INCLUDED_KM", "1")), 0)
+            distance_km = max(float(order.delivery_distance_km or 0), 0)
+            distance_amount = max(distance_km - included_km, 0) * per_km_rate
+            incentive_amount = max(float(order.delivery_incentive or 0), 0)
+            payout_amount = base_amount + distance_amount + incentive_amount
             db.add(DeliveryPayoutLedgerModel(
                 order_id=order.id,
                 partner_phone=partner.phone,
-                payout_amount=25,
+                payout_amount=round(payout_amount, 2),
+                base_amount=round(base_amount, 2),
+                distance_km=round(distance_km, 2),
+                distance_amount=round(distance_amount, 2),
+                incentive_amount=round(incentive_amount, 2),
                 cod_amount=order.total if order.payment_method == "COD" else 0,
                 status="PENDING",
             ))
@@ -412,10 +426,17 @@ def partner_earnings(partner: DeliveryPartnerModel = Depends(current_partner)):
         pending = sum(entry.payout_amount for entry in entries if entry.status == "PENDING")
         paid = sum(entry.payout_amount for entry in entries if entry.status == "PAID")
         cod = sum(entry.cod_amount for entry in entries)
+        base_rate = max(float(os.getenv("DELIVERY_BASE_RATE", "25")), 0)
+        per_km_rate = max(float(os.getenv("DELIVERY_PER_KM_RATE", "8")), 0)
+        included_km = max(float(os.getenv("DELIVERY_INCLUDED_KM", "1")), 0)
         return {
             "currency": "INR",
             "completed_orders": len(entries),
-            "base_rate": 25,
+            "base_rate": base_rate,
+            "per_km_rate": per_km_rate,
+            "included_km": included_km,
+            "distance_amount": sum(entry.distance_amount for entry in entries),
+            "incentive_amount": sum(entry.incentive_amount for entry in entries),
             "earned_amount": earned,
             "estimated_earnings": earned,
             "pending_payout": pending,
@@ -428,6 +449,10 @@ def partner_earnings(partner: DeliveryPartnerModel = Depends(current_partner)):
                 {
                     "order_id": entry.order_id,
                     "payout_amount": entry.payout_amount,
+                    "base_amount": entry.base_amount,
+                    "distance_km": entry.distance_km,
+                    "distance_amount": entry.distance_amount,
+                    "incentive_amount": entry.incentive_amount,
                     "cod_amount": entry.cod_amount,
                     "status": entry.status,
                     "created_at": entry.created_at.isoformat(),
@@ -492,6 +517,10 @@ def admin_payouts(
                     "order_id": entry.order_id,
                     "partner_phone": entry.partner_phone,
                     "payout_amount": entry.payout_amount,
+                    "base_amount": entry.base_amount,
+                    "distance_km": entry.distance_km,
+                    "distance_amount": entry.distance_amount,
+                    "incentive_amount": entry.incentive_amount,
                     "cod_amount": entry.cod_amount,
                     "status": entry.status,
                     "created_at": entry.created_at.isoformat(),

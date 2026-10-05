@@ -53,6 +53,11 @@ class OrderModel(Base):
     delivery_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     delivery_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     delivery_location_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Optional batch and payout inputs set by the authorized store admin.
+    delivery_batch_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    delivery_sequence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    delivery_distance_km: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    delivery_incentive: Mapped[float] = mapped_column(Float, default=0, nullable=False)
 
 
 class OrderStatusHistoryModel(Base):
@@ -166,6 +171,10 @@ class DeliveryPayoutLedgerModel(Base):
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), unique=True, index=True)
     partner_phone: Mapped[str] = mapped_column(String(30), index=True, nullable=False)
     payout_amount: Mapped[float] = mapped_column(Float, nullable=False)
+    base_amount: Mapped[float] = mapped_column(Float, default=25, nullable=False)
+    distance_km: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    distance_amount: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    incentive_amount: Mapped[float] = mapped_column(Float, default=0, nullable=False)
     cod_amount: Mapped[float] = mapped_column(Float, default=0, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="PENDING", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
