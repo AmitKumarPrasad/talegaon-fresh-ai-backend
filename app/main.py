@@ -458,6 +458,12 @@ async def admin_assign_delivery_batch(payload: AssignDeliveryBatchRequest, reque
         return PlainTextResponse("Unauthorized", status_code=401)
     if os.getenv("DELIVERY_MULTI_ORDER_ENABLED", "false").strip().lower() != "true":
         return PlainTextResponse("Multi-order delivery is disabled during partner training", status_code=409)
+    try:
+        max_batch_orders = max(2, min(int(os.getenv("DELIVERY_MAX_BATCH_ORDERS", "2")), 3))
+    except ValueError:
+        max_batch_orders = 2
+    if len(payload.order_ids) > max_batch_orders:
+        return PlainTextResponse(f"Batch size cannot exceed {max_batch_orders} orders", status_code=400)
     if len(set(payload.order_ids)) != len(payload.order_ids):
         return PlainTextResponse("Each order ID must be unique", status_code=400)
 
@@ -492,7 +498,7 @@ async def admin_assign_delivery_batch(payload: AssignDeliveryBatchRequest, reque
     return {
         "batch_id": batch_id,
         "order_count": len(results),
-        "max_orders": int(os.getenv("DELIVERY_MAX_BATCH_ORDERS", "3")),
+        "max_orders": max_batch_orders,
         "orders": results,
     }
 
