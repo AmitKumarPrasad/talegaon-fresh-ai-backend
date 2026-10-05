@@ -392,8 +392,18 @@ def partner_complete_delivery(
             per_km_rate = max(float(os.getenv("DELIVERY_PER_KM_RATE", "8")), 0)
             included_km = max(float(os.getenv("DELIVERY_INCLUDED_KM", "1")), 0)
             distance_km = max(float(order.delivery_distance_km or 0), 0)
-            distance_amount = max(distance_km - included_km, 0) * per_km_rate
-            incentive_amount = max(float(order.delivery_incentive or 0), 0)
+            batch_count = 1
+            if order.delivery_batch_id:
+                batch_count = max(
+                    db.query(OrderModel)
+                    .filter(OrderModel.delivery_batch_id == order.delivery_batch_id)
+                    .count(),
+                    1,
+                )
+            # Distance and batch incentive are entered once for the route and split
+            # across its stops; the base amount remains payable per delivered order.
+            distance_amount = max(distance_km - included_km, 0) * per_km_rate / batch_count
+            incentive_amount = max(float(order.delivery_incentive or 0), 0) / batch_count
             payout_amount = base_amount + distance_amount + incentive_amount
             db.add(DeliveryPayoutLedgerModel(
                 order_id=order.id,
