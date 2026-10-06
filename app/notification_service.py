@@ -135,12 +135,15 @@ class NotificationService:
             return False
 
     @staticmethod
-    def notify_partner_new_order(partner_fcm_token: str, order_id: int, customer_name: str) -> bool:
+    def notify_partner_new_order(
+        partner_fcm_token: str, order_id: int, customer_name: str,
+        delivery_address: str = "", total_amount: float | None = None,
+    ) -> bool:
         """Notify a delivery partner about a new order."""
         return NotificationService.send_notification_to_partner(
             fcm_token=partner_fcm_token,
             title="New Order",
-            body=f"You have a new delivery from {customer_name}",
+            body=f"New order from {customer_name}" + (f" • {delivery_address}" if delivery_address else ""),
             order_id=order_id,
             data={"order_id": str(order_id), "event_type": "new_order"},
         )
@@ -152,8 +155,7 @@ class NotificationService:
         """Notify a customer about order status change."""
         status_messages = {
             "CONFIRMED": "Your order has been confirmed",
-            "PREPARING": "Your order is being prepared",
-            "READY": "Your order is ready for pickup",
+            "PACKING": "Your order is being packed",
             "OUT_FOR_DELIVERY": "Your order is out for delivery",
             "DELIVERED": "Your order has been delivered",
             "CANCELLED": "Your order has been cancelled",
