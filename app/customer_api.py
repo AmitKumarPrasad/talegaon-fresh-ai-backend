@@ -28,12 +28,14 @@ from app.models import (
     OrderStatusHistoryModel,
     ProductModel,
     ProductRequestModel,
+    DeliveryPartnerModel,
 )
 from app.order_details import customer_order_dict as _order_dict, get_customer_order, save_payment_link
 from app.payment_service import PaymentError, create_payment_link
 from app.order_status import get_allowed_transitions, list_status_history
 from app.delivery_service import add_message_by_customer, get_tracking_info, list_messages_for_customer
 from app.seller_notification import notify_seller
+from app.notification_service import NotificationService
 from app.state import get_state
 from app.phone_utils import is_valid_indian_mobile
 
@@ -72,6 +74,10 @@ class PinAuthRequest(BaseModel):
 class RefreshRequest(BaseModel):
     refresh_token: str = Field(min_length=20, max_length=500)
     device_id: str = Field(min_length=16, max_length=200)
+
+
+class FcmTokenRequest(BaseModel):
+    fcm_token: str = Field(min_length=20, max_length=500)
 
 
 class OtpRequest(BaseModel):
@@ -429,6 +435,21 @@ def auth_logout(customer: CustomerModel = Depends(current_customer)):
     logout_customer(customer)
     return {"status": "logged_out"}
 
+
+@router.put("/customers/me/fcm-token")
+def update_fcm_token(payload: FcmTokenRequest, customer: CustomerModel = Depends(current_customer)):
+    """Store or update the customer's FCM token for push notifications."""
+    db = SessionLocal()
+    try:
+        customer_obj = db.get(CustomerModel, customer.phone)
+        if not customer_obj:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        customer_obj.fcm_token = payload.fcm_token
+        db.commit()
+        return {"status": "updated"}
+    finally:
+        db.close()
+
 @router.delete("/customers/me")
 def delete_customer_account(customer: CustomerModel = Depends(current_customer)):
     """Delete account data and anonymize retained transaction records."""
@@ -710,6 +731,24 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
             logging.getLogger(__name__).exception(
                 "Order created but seller notification failed order_id=%s", order.id
             )
+        
+        # Notify delivery partners about the new order
+        try:
+            partners = db.query(DeliveryPartnerModel).filter(DeliveryPartnerModel.fcm_token.isnot(None)).all()
+            for partner in partners:
+                NotificationService.notify_partner_new_order(
+                    partner_fcm_token=partner.fcm_token,
+                    order_id=order.id,
+                    customer_name=customer.name,
+                    delivery_address=order.address,
+                    total_amount=order.total,
+                )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "Order created but partner notification failed order_id=%s", order.id
+            )
+        
         return response
     finally:
         db.close()

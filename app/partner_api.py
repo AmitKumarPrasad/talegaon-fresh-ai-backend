@@ -22,6 +22,7 @@ from app.order_status import transition_order
 from app.phone_utils import is_valid_indian_mobile
 from app.pin_auth import _pin_hash, _pin_matches
 from app.openai_service import generate_partner_reply
+from app.notification_service import NotificationService
 
 router = APIRouter(prefix="/partner", tags=["delivery-partner"])
 
@@ -60,6 +61,10 @@ class PartnerRefreshRequest(BaseModel):
 
 class PartnerLogoutRequest(BaseModel):
     device_id: str = Field(min_length=16, max_length=200)
+
+
+class PartnerFcmTokenRequest(BaseModel):
+    fcm_token: str = Field(min_length=20, max_length=500)
 
 
 class PartnerProvisionRequest(BaseModel):
@@ -228,6 +233,21 @@ def partner_logout(
 @router.get("/me")
 def partner_me(partner: DeliveryPartnerModel = Depends(current_partner)):
     return {"phone": partner.phone, "name": partner.name, "active": partner.active}
+
+
+@router.put("/me/fcm-token")
+def update_partner_fcm_token(payload: PartnerFcmTokenRequest, partner: DeliveryPartnerModel = Depends(current_partner)):
+    """Store or update the partner's FCM token for push notifications."""
+    db = SessionLocal()
+    try:
+        partner_obj = db.get(DeliveryPartnerModel, partner.phone)
+        if not partner_obj:
+            raise HTTPException(status_code=404, detail="Partner not found")
+        partner_obj.fcm_token = payload.fcm_token
+        db.commit()
+        return {"status": "updated"}
+    finally:
+        db.close()
 
 
 def _order_dict(db, order: OrderModel) -> dict:
