@@ -139,6 +139,7 @@ class CustomerModel(Base):
     otp_locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     auth_version: Mapped[int] = mapped_column(Integer, default=1)
     cart: Mapped[list] = mapped_column(JSON, default=list)
+    fcm_token: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class AddressModel(Base):
@@ -159,6 +160,7 @@ class DeliveryPartnerModel(Base):
     pin_hash: Mapped[str] = mapped_column(String(200), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    fcm_token: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class DeliveryPartnerSessionModel(Base):
