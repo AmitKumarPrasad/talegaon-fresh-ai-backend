@@ -1,7 +1,11 @@
 from collections.abc import Callable
+import logging
 
 from app.db import SessionLocal
-from app.models import OrderItemModel, OrderModel, OrderStatusHistoryModel, ProductModel
+from app.models import CustomerModel, OrderItemModel, OrderModel, OrderStatusHistoryModel, ProductModel
+from app.notification_service import NotificationService
+
+logger = logging.getLogger(__name__)
 
 ORDER_STATUSES = {
     "PENDING", "ADDRESS_CONFIRMED", "PAYMENT_PENDING", "CONFIRMED",
@@ -52,7 +56,14 @@ def transition_order(order_id: int, new_status: str, updater: Callable | None = 
         db.add(OrderStatusHistoryModel(
             order_id=order.id, from_status=previous_status, to_status=new_status
         ))
+        customer_id = order.customer_id
         db.commit()
+        try:
+            customer = db.get(CustomerModel, customer_id)
+            if customer and customer.fcm_token:
+                NotificationService.notify_customer_order_status(customer.fcm_token, order_id, new_status)
+        except Exception:
+            logger.exception("Order status push failed order_id=%s", order_id)
         return True
     finally:
         db.close()
