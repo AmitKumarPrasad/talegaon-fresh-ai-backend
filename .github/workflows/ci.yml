@@ -9,6 +9,20 @@ on:
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: freshora
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: freshora_migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U freshora -d freshora_migration_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -18,5 +32,12 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m compileall app
       - run: alembic upgrade head
+      - name: Verify PostgreSQL upgrade from deployed revision
+        env:
+          DATABASE_URL: postgresql://freshora:test_password@localhost:5432/freshora_migration_test
+        run: |
+          alembic upgrade 0024_partner_batches_earnings
+          alembic upgrade head
+          alembic current
       - run: python -m pytest -q
       - run: docker build -t talegaon-fresh-ai-backend:ci .

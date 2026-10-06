@@ -8,4 +8,4 @@ COPY app ./app
 COPY alembic.ini .
 COPY alembic ./alembic
 EXPOSE 8000
-CMD ["sh", "-c", "if [ \"$RUN_MIGRATIONS\" = \"true\" ]; then alembic upgrade head; fi; exec uvicorn app.main:app --host 0.0.0.0 --port $PORT"]
+CMD ["sh", "-ec", "if [ \"$RUN_MIGRATIONS\" = \"true\" ]; then alembic upgrade head; fi; exec uvicorn app.main:app --host 0.0.0.0 --port $PORT"]
