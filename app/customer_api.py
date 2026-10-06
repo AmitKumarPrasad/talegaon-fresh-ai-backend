@@ -5,6 +5,7 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy.exc import IntegrityError
 import os
 
 from app.auth import current_customer, logout_customer
@@ -118,10 +119,99 @@ class OrderRequest(BaseModel):
     address_id: int | None = None
     address: str | None = Field(default=None, max_length=500)
     payment_method: str | None = Field(default=None, max_length=20)
+    promo_code: str | None = Field(default=None, max_length=32)
+
+
+class PromoValidationRequest(BaseModel):
+    items: list[CartItem] = Field(min_length=1, max_length=50)
+    promo_code: str = Field(min_length=1, max_length=32)
 
 
 class AiChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
+
+
+_PROMO_RULES = {
+    "FRESH10": {"percent": 0.10, "max_discount": 50.0, "min_order": 0.0},
+    "WELCOME50": {"flat_discount": 50.0, "min_order": 199.0},
+    "FRESHORA20": {"percent": 0.20, "max_discount": 100.0, "min_order": 499.0},
+}
+_DELIVERY_THRESHOLD = 199.0
+_DELIVERY_FEE = 20.0
+
+
+def _promo_rule(db, customer_id: str, promo_code: str | None) -> tuple[str, dict] | None:
+    if not promo_code or not promo_code.strip():
+        return None
+
+    code = promo_code.strip().upper()
+    rule = _PROMO_RULES.get(code)
+    if rule is not None:
+        return code, rule
+
+    referrer = db.query(CustomerModel).filter(
+        CustomerModel.referral_code == code
+    ).first()
+    if not referrer or referrer.phone == customer_id:
+        raise HTTPException(status_code=400, detail="Invalid promo code.")
+
+    prior_order = db.query(OrderModel.id).filter(
+        OrderModel.customer_id == customer_id
+    ).first()
+    if prior_order:
+        raise HTTPException(
+            status_code=400,
+            detail="Referral codes are only valid on your first order.",
+        )
+
+    return code, {
+        "percent": 0.20,
+        "max_discount": 100.0,
+        "min_order": 499.0,
+    }
+
+
+def _discount_amount(rule: dict | None, subtotal: float) -> float:
+    if rule is None:
+        return 0.0
+    minimum = rule["min_order"]
+    if subtotal < minimum:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This code requires a product subtotal of ₹{minimum:.0f}.",
+        )
+    if "flat_discount" in rule:
+        return min(round(rule["flat_discount"], 2), subtotal)
+    return min(
+        round(subtotal * rule["percent"], 2),
+        rule["max_discount"],
+        subtotal,
+    )
+
+
+def _quote_order(db, customer_id: str, items: list[CartItem], promo_code: str) -> dict:
+    resolved_promo = _promo_rule(db, customer_id, promo_code)
+    subtotal = 0.0
+    for item in items:
+        product = db.query(ProductModel).filter(
+            ProductModel.name.ilike(item.name)
+        ).first()
+        if not product:
+            raise HTTPException(status_code=400, detail=f"Product not found: {item.name}")
+        subtotal += round(product.price * item.quantity, 2)
+    subtotal = round(subtotal, 2)
+    delivery_fee = _DELIVERY_FEE if subtotal < _DELIVERY_THRESHOLD else 0.0
+    discount = _discount_amount(
+        resolved_promo[1] if resolved_promo else None,
+        subtotal,
+    )
+    return {
+        "promo_code": resolved_promo[0] if resolved_promo else None,
+        "subtotal": subtotal,
+        "delivery_fee": delivery_fee,
+        "discount_amount": discount,
+        "total": round(subtotal + delivery_fee - discount, 2),
+    }
 
 
 def _catalog_reply(message: str) -> str | None:
@@ -485,10 +575,58 @@ def mobile_ai_chat(
     return {"reply": reply}
 
 
+@router.get("/customers/me/referral-code")
+def get_customer_referral_code(customer: CustomerModel = Depends(current_customer)):
+    db = SessionLocal()
+    try:
+        stored = (
+            db.query(CustomerModel)
+            .filter(CustomerModel.phone == customer.phone)
+            .with_for_update()
+            .first()
+        )
+        if not stored:
+            raise HTTPException(status_code=401, detail="Customer not found")
+        if stored.referral_code:
+            return {"referral_code": stored.referral_code}
+
+        for _ in range(5):
+            stored.referral_code = f"FRESHORA{secrets.token_hex(4).upper()}"
+            try:
+                db.commit()
+                return {"referral_code": stored.referral_code}
+            except IntegrityError:
+                db.rollback()
+                stored = db.get(CustomerModel, customer.phone)
+                if stored and stored.referral_code:
+                    return {"referral_code": stored.referral_code}
+        raise HTTPException(
+            status_code=503,
+            detail="Could not generate a referral code. Please try again.",
+        )
+    finally:
+        db.close()
+
+
+@router.post("/customers/me/promos/validate")
+def validate_customer_promo(
+    payload: PromoValidationRequest,
+    customer: CustomerModel = Depends(current_customer),
+):
+    db = SessionLocal()
+    try:
+        return _quote_order(db, customer.phone, payload.items, payload.promo_code)
+    finally:
+        db.close()
+
+
 @router.post("/customers/me/orders")
 def create_order(payload: OrderRequest, customer: CustomerModel = Depends(current_customer)):
     db = SessionLocal()
     try:
+        db.query(CustomerModel).filter(
+            CustomerModel.phone == customer.phone
+        ).with_for_update().first()
         address = payload.address
         if payload.address_id is not None:
             saved = db.get(AddressModel, payload.address_id)
@@ -497,10 +635,17 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
             address = f"{saved.address}, {saved.city}, {saved.pincode}"
         if not address:
             raise HTTPException(status_code=400, detail="Delivery address is required")
-        order = OrderModel(customer_id=customer.phone, address=address, status="PENDING")
+        promo_code = payload.promo_code.strip().upper() if payload.promo_code else None
+        resolved_promo = _promo_rule(db, customer.phone, promo_code)
+        order = OrderModel(
+            customer_id=customer.phone,
+            address=address,
+            status="PENDING",
+            promo_code=resolved_promo[0] if resolved_promo else None,
+        )
         db.add(order)
         db.flush()
-        total = 0.0
+        subtotal = 0.0
         for item in payload.items:
             product = db.query(ProductModel).filter(ProductModel.name.ilike(item.name)).first()
             if not product:
@@ -525,8 +670,17 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
             product.in_stock = product.stock_quantity > 0
             line_total = round(product.price * item.quantity, 2)
             db.add(OrderItemModel(order_id=order.id, product_name=product.name, quantity=item.quantity, unit_price=product.price, line_total=line_total))
-            total += line_total
-        order.total = round(total, 2)
+            subtotal += line_total
+        subtotal = round(subtotal, 2)
+        order.delivery_fee = _DELIVERY_FEE if subtotal < _DELIVERY_THRESHOLD else 0.0
+        order.discount_amount = _discount_amount(
+            resolved_promo[1] if resolved_promo else None,
+            subtotal,
+        )
+        order.total = round(
+            subtotal + order.delivery_fee - order.discount_amount,
+            2,
+        )
         order.stock_reserved = True
         if payload.payment_method:
             method = payload.payment_method.upper()

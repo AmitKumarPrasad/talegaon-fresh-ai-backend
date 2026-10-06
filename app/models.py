@@ -33,6 +33,9 @@ class OrderModel(Base):
     customer_id: Mapped[str] = mapped_column(String(50), index=True)
     status: Mapped[str] = mapped_column(String(30), default="PENDING")
     total: Mapped[float] = mapped_column(Float, default=0)
+    delivery_fee: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    discount_amount: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    promo_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     payment_method: Mapped[str | None] = mapped_column(String(20), nullable=True)
     payment_link_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -125,6 +128,9 @@ class CustomerModel(Base):
     __tablename__ = "customers"
     phone: Mapped[str] = mapped_column(String(50), primary_key=True)
     name: Mapped[str] = mapped_column(String(100), default="Customer")
+    referral_code: Mapped[str | None] = mapped_column(
+        String(24), unique=True, index=True, nullable=True
+    )
     otp_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     otp_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     otp_window_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -90,6 +90,9 @@ def customer_order_dict(db, order: OrderModel) -> dict:
         created_at = created_at.replace(tzinfo=timezone.utc)
     return {
         "order_id": order.id, "status": order.status, "total": order.total,
+        "subtotal": round(order.total - order.delivery_fee + order.discount_amount, 2),
+        "delivery_fee": order.delivery_fee, "discount_amount": order.discount_amount,
+        "promo_code": order.promo_code,
         "address": order.address, "payment_method": order.payment_method,
         "payment_link_url": order.payment_link_url,
         "payment_verified_at": order.payment_verified_at.isoformat() if order.payment_verified_at else None,

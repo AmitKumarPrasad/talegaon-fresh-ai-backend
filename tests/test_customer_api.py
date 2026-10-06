@@ -123,7 +123,9 @@ def test_cart_and_orders():
         "payment_method": "COD"
     })
     assert order.status_code == 200
-    assert order.json()["total"] == 80
+    assert order.json()["subtotal"] == 80
+    assert order.json()["delivery_fee"] == 20
+    assert order.json()["total"] == 100
     assert order.json()["status"] == "CONFIRMED"
     assert isinstance(order.json()["created_at"], str)
     created_at = datetime.fromisoformat(order.json()["created_at"])
@@ -200,7 +202,7 @@ def test_customer_upi_payment_link_is_created_and_reused():
         assert first.status_code == 200
         assert first.json()["payment_link_url"] == "https://rzp.io/i/customer-test"
         assert "razorpay_payment_link_id" not in first.json()
-        create_link.assert_called_once_with(order_id, 40.0, "9999999999")
+        create_link.assert_called_once_with(order_id, 60.0, "9999999999")
 
         second = client.post(f"/customers/me/orders/{order_id}/payment-link", headers=headers)
         assert second.status_code == 200
@@ -219,6 +221,147 @@ def test_customer_upi_payment_link_requires_upi_order():
     assert order.status_code == 200
     response = client.post(f"/customers/me/orders/{order.json()['order_id']}/payment-link", headers=headers)
     assert response.status_code == 400
+
+
+def test_customer_promo_quote_and_order_use_catalog_prices_and_delivery_fee():
+    token = auth()
+    headers = {"Authorization": "Bearer " + token}
+    items = [{"name": "Tomato", "unit": "1 kg", "price": 999, "quantity": 2}]
+
+    quote = client.post(
+        "/customers/me/promos/validate",
+        headers=headers,
+        json={"promo_code": "fresh10", "items": items},
+    )
+
+    assert quote.status_code == 200
+    assert quote.json() == {
+        "promo_code": "FRESH10",
+        "subtotal": 80.0,
+        "delivery_fee": 20.0,
+        "discount_amount": 8.0,
+        "total": 92.0,
+    }
+
+    order = client.post("/customers/me/orders", headers=headers, json={
+        "items": items,
+        "address": "Main Road, Talegaon, 410507",
+        "payment_method": "COD",
+        "promo_code": "FRESH10",
+    })
+    assert order.status_code == 200
+    assert order.json()["promo_code"] == "FRESH10"
+    assert order.json()["discount_amount"] == 8
+    assert order.json()["delivery_fee"] == 20
+    assert order.json()["total"] == 92
+
+
+def test_customer_promo_rules_keep_configured_caps_and_minimums():
+    headers = {"Authorization": "Bearer " + auth()}
+    welcome = client.post("/customers/me/promos/validate", headers=headers, json={
+        "promo_code": "WELCOME50",
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 5}],
+    })
+    assert welcome.status_code == 200
+    assert welcome.json()["subtotal"] == 200
+    assert welcome.json()["discount_amount"] == 50
+    assert welcome.json()["delivery_fee"] == 0
+    assert welcome.json()["total"] == 150
+
+    capped = client.post("/customers/me/promos/validate", headers=headers, json={
+        "promo_code": "FRESHORA20",
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 13}],
+    })
+    assert capped.status_code == 200
+    assert capped.json()["subtotal"] == 520
+    assert capped.json()["discount_amount"] == 100
+    assert capped.json()["total"] == 420
+
+    below_minimum = client.post(
+        "/customers/me/promos/validate",
+        headers=headers,
+        json={
+            "promo_code": "WELCOME50",
+            "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 4}],
+        },
+    )
+    assert below_minimum.status_code == 400
+
+
+def test_delivery_fee_is_free_at_and_above_199():
+    first_headers = {"Authorization": "Bearer " + auth()}
+    below = client.post("/customers/me/orders", headers=first_headers, json={
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 4}],
+        "address": "Main Road, Talegaon, 410507",
+        "payment_method": "COD",
+    })
+    assert below.status_code == 200
+    assert below.json()["total"] == 180
+    assert below.json()["delivery_fee"] == 20
+
+    second_headers = {"Authorization": "Bearer " + auth()}
+    at_threshold = client.post("/customers/me/orders", headers=second_headers, json={
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 5}],
+        "address": "Main Road, Talegaon, 410507",
+        "payment_method": "COD",
+    })
+    assert at_threshold.status_code == 200
+    assert at_threshold.json()["total"] == 200
+    assert at_threshold.json()["delivery_fee"] == 0
+
+
+def test_referral_code_discount_is_first_order_only_and_owner_cannot_redeem():
+    owner_headers = {"Authorization": "Bearer " + auth()}
+    code_response = client.get(
+        "/customers/me/referral-code",
+        headers=owner_headers,
+    )
+    assert code_response.status_code == 200
+    code = code_response.json()["referral_code"]
+    assert code.startswith("FRESHORA")
+    assert len(code) == len("FRESHORA") + 8
+    assert client.get(
+        "/customers/me/referral-code",
+        headers=owner_headers,
+    ).json()["referral_code"] == code
+
+    self_redeem = client.post(
+        "/customers/me/promos/validate",
+        headers=owner_headers,
+        json={
+            "promo_code": code,
+            "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 10}],
+        },
+    )
+    assert self_redeem.status_code == 400
+
+    invitee_headers = {"Authorization": "Bearer " + auth()}
+    from app.db import SessionLocal
+    db = SessionLocal()
+    tomato = db.query(ProductModel).filter_by(name="Tomato").one()
+    tomato.price = 50
+    tomato.stock_quantity = 20
+    tomato.in_stock = True
+    db.commit()
+    db.close()
+
+    payload = {
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 50, "quantity": 10}],
+        "address": "Main Road, Talegaon, 410507",
+        "payment_method": "COD",
+        "promo_code": code,
+    }
+    order = client.post("/customers/me/orders", headers=invitee_headers, json=payload)
+    assert order.status_code == 200
+    assert order.json()["discount_amount"] == 100
+    assert order.json()["delivery_fee"] == 0
+    assert order.json()["total"] == 400
+
+    repeated = client.post("/customers/me/promos/validate", headers=invitee_headers, json={
+        "promo_code": code,
+        "items": payload["items"],
+    })
+    assert repeated.status_code == 400
 
 
 def test_unauthorized_customer_api():
@@ -381,18 +524,20 @@ def test_checkout_notifies_seller_after_order_commit():
         assert response.status_code == 200
         body = response.json()
         assert body["status"] == "CONFIRMED"
-        assert body["total"] == 100.0
+        assert body["delivery_fee"] == 20.0
+        assert body["total"] == 120.0
         notify.assert_called_once()
         call = notify.call_args.kwargs
         assert call["order_id"] == body["order_id"]
-        assert call["total"] == 100.0
+        assert call["total"] == 120.0
         assert call["payment_method"] == "COD"
 
         db = SessionLocal()
         created = db.get(OrderModel, body["order_id"])
         assert created is not None
         assert created.status == "CONFIRMED"
-        assert created.total == 100.0
+        assert created.delivery_fee == 20.0
+        assert created.total == 120.0
         db.close()
     finally:
         db = SessionLocal()
