@@ -10,6 +10,19 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Alembic writes this revision ID after upgrade() returns. PostgreSQL's
+    # default alembic_version.version_num is VARCHAR(32), while this ID is
+    # longer. Widen it before Alembic records the revision. SQLite does not
+    # enforce VARCHAR length and its type alteration needs a batch rebuild.
+    if op.get_bind().dialect.name == "postgresql":
+        op.alter_column(
+            "alembic_version",
+            "version_num",
+            existing_type=sa.String(length=32),
+            type_=sa.String(length=255),
+            existing_nullable=False,
+        )
+
     op.add_column(
         "customers",
         sa.Column("referral_code", sa.String(length=24), nullable=True),
