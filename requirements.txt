@@ -8,5 +8,6 @@ pytest-asyncio
 SQLAlchemy
 psycopg2-binary
 alembic
+firebase-admin
 
 redis>=6.4,<7

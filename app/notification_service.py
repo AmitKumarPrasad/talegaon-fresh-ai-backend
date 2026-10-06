@@ -1,6 +1,10 @@
 import json
 import logging
+import os
 from typing import Optional
+
+import firebase_admin
+from firebase_admin import credentials, messaging
 
 logger = logging.getLogger(__name__)
 
@@ -8,11 +12,31 @@ logger = logging.getLogger(__name__)
 class NotificationService:
     """Manages FCM notifications for customers and delivery partners."""
 
-    # In production, initialize Firebase Admin SDK here
-    # from firebase_admin import credentials, messaging
-    # SERVICE_ACCOUNT_KEY = "/path/to/serviceAccountKey.json"
-    # cred = credentials.Certificate(SERVICE_ACCOUNT_KEY)
-    # firebase_admin.initialize_app(cred)
+    _initialized = False
+
+    @staticmethod
+    def _initialize_firebase():
+        """Initialize Firebase Admin SDK if not already initialized."""
+        if NotificationService._initialized:
+            return
+
+        try:
+            # Initialize Firebase Admin SDK with service account key
+            service_account_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY_PATH")
+            if not service_account_path:
+                logger.warning("FIREBASE_SERVICE_ACCOUNT_KEY_PATH not set; FCM notifications disabled")
+                return
+
+            if not os.path.exists(service_account_path):
+                logger.warning(f"Service account key file not found: {service_account_path}")
+                return
+
+            cred = credentials.Certificate(service_account_path)
+            firebase_admin.initialize_app(cred)
+            NotificationService._initialized = True
+            logger.info("Firebase Admin SDK initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Firebase Admin SDK: {str(e)}")
 
     @staticmethod
     def send_notification_to_customer(
@@ -40,23 +64,22 @@ class NotificationService:
             return False
 
         try:
-            # TODO: Implement Firebase Admin SDK notification send
-            # from firebase_admin import messaging
-            # message = messaging.Message(
-            #     notification=messaging.Notification(title=title, body=body),
-            #     data={
-            #         "order_id": str(order_id),
-            #         **(data or {})
-            #     },
-            #     token=fcm_token,
-            # )
-            # response = messaging.send(message)
-            # logger.info(f"Notification sent to customer: {response}")
-            # return True
+            NotificationService._initialize_firebase()
+            
+            if not NotificationService._initialized:
+                logger.warning("Firebase Admin SDK not initialized; notification not sent")
+                return False
 
-            logger.info(
-                f"Customer notification queued: order_id={order_id}, title={title}"
+            message = messaging.Message(
+                notification=messaging.Notification(title=title, body=body),
+                data={
+                    "order_id": str(order_id),
+                    **(data or {})
+                },
+                token=fcm_token,
             )
+            response = messaging.send(message)
+            logger.info(f"Notification sent to customer: order_id={order_id}, response={response}")
             return True
 
         except Exception as e:
@@ -89,23 +112,22 @@ class NotificationService:
             return False
 
         try:
-            # TODO: Implement Firebase Admin SDK notification send
-            # from firebase_admin import messaging
-            # message = messaging.Message(
-            #     notification=messaging.Notification(title=title, body=body),
-            #     data={
-            #         "order_id": str(order_id),
-            #         **(data or {})
-            #     },
-            #     token=fcm_token,
-            # )
-            # response = messaging.send(message)
-            # logger.info(f"Notification sent to partner: {response}")
-            # return True
+            NotificationService._initialize_firebase()
+            
+            if not NotificationService._initialized:
+                logger.warning("Firebase Admin SDK not initialized; notification not sent")
+                return False
 
-            logger.info(
-                f"Partner notification queued: order_id={order_id}, title={title}"
+            message = messaging.Message(
+                notification=messaging.Notification(title=title, body=body),
+                data={
+                    "order_id": str(order_id),
+                    **(data or {})
+                },
+                token=fcm_token,
             )
+            response = messaging.send(message)
+            logger.info(f"Notification sent to partner: order_id={order_id}, response={response}")
             return True
 
         except Exception as e:
