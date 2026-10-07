@@ -39,6 +39,8 @@ from app.notification_service import NotificationService
 from app.state import get_state
 from app.phone_utils import is_valid_indian_mobile
 
+from app import reviewer
+
 router = APIRouter()
 
 
@@ -472,6 +474,7 @@ def delete_customer_account(customer: CustomerModel = Depends(current_customer))
                 order.delivery_lng = None
                 order.delivery_location_updated_at = None
 
+        db.query(reviewer.ReviewerOrderModel).filter_by(customer_id=customer.phone).delete(synchronize_session=False)
         db.query(AddressModel).filter(AddressModel.customer_id == customer.phone).delete(synchronize_session=False)
         db.query(CustomerSessionModel).filter(CustomerSessionModel.customer_id == customer.phone).delete(synchronize_session=False)
         db.query(PinCredentialModel).filter(PinCredentialModel.customer_id == customer.phone).delete(synchronize_session=False)
@@ -485,7 +488,7 @@ def delete_customer_account(customer: CustomerModel = Depends(current_customer))
 
 @router.get("/customers/me")
 def get_me(customer: CustomerModel = Depends(current_customer)):
-    return {"phone": customer.phone, "name": customer.name}
+    return {"phone": customer.phone, "name": customer.name, "is_reviewer": reviewer.is_reviewer(customer.phone)}
 
 
 @router.get("/customers/me/addresses")
@@ -589,6 +592,13 @@ def mobile_ai_chat(
     payload: AiChatRequest,
     customer: CustomerModel = Depends(current_customer),
 ):
+    if reviewer.is_reviewer(customer.phone):
+        catalog = _catalog_reply(payload.message)
+        if catalog:
+            return {"reply": catalog}
+        demo_orders = reviewer.list_orders(customer.phone)
+        latest = demo_orders[0] if demo_orders else None
+        return {"reply": (f"Demo order #{latest['order_id']}: Delivered. Total ₹{latest['total']:.2f}. No payment or real delivery is required." if latest else "Reviewer demo: browse products, add a delivery address anywhere, and place a COD demo order. No real delivery or payment is made.")}
     try:
         reply = _mobile_ai_reply(payload.message, customer.phone)
     except RuntimeError as exc:
@@ -656,6 +666,12 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
             address = f"{saved.address}, {saved.city}, {saved.pincode}"
         if not address:
             raise HTTPException(status_code=400, detail="Delivery address is required")
+        reviewer.require_service_area(address, customer.phone)
+        if reviewer.is_reviewer(customer.phone):
+            if payload.payment_method and payload.payment_method.upper() != "COD":
+                raise HTTPException(400, "Reviewer orders use simulated COD only")
+            quote = _quote_order(db, customer.phone, payload.items, payload.promo_code or "")
+            return reviewer.create_order(db, customer, payload, address, quote)
         promo_code = payload.promo_code.strip().upper() if payload.promo_code else None
         resolved_promo = _promo_rule(db, customer.phone, promo_code)
         order = OrderModel(
@@ -759,6 +775,8 @@ def create_customer_payment_link(
     order_id: int,
     customer: CustomerModel = Depends(current_customer),
 ):
+    if reviewer.is_reviewer(customer.phone):
+        raise HTTPException(400, "No real payments are available for reviewer demo orders")
     order = get_customer_order(order_id, customer.phone)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -787,6 +805,8 @@ def create_customer_payment_link(
 
 @router.get("/customers/me/orders/{order_id}")
 def get_customer_order_details(order_id: int, customer: CustomerModel = Depends(current_customer)):
+    if reviewer.is_reviewer(customer.phone):
+        return reviewer.get_order(customer.phone, order_id)
     order = get_customer_order(order_id, customer.phone)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -795,6 +815,8 @@ def get_customer_order_details(order_id: int, customer: CustomerModel = Depends(
 
 @router.get("/customers/me/orders")
 def list_customer_orders(customer: CustomerModel = Depends(current_customer)):
+    if reviewer.is_reviewer(customer.phone):
+        return {"orders": reviewer.list_orders(customer.phone)}
     db = SessionLocal()
     try:
         orders = db.query(OrderModel).filter(OrderModel.customer_id == customer.phone).order_by(OrderModel.id.desc()).all()
@@ -805,6 +827,8 @@ def list_customer_orders(customer: CustomerModel = Depends(current_customer)):
 
 @router.get("/customers/me/orders/{order_id}/status-history")
 def get_order_status_history(order_id: int, customer: CustomerModel = Depends(current_customer)):
+    if reviewer.is_reviewer(customer.phone):
+        return {"order_id": order_id, "history": reviewer.get_order(customer.phone, order_id)["history"]}
     order = get_customer_order(order_id, customer.phone)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -813,6 +837,8 @@ def get_order_status_history(order_id: int, customer: CustomerModel = Depends(cu
 
 @router.get("/customers/me/orders/{order_id}/tracking")
 def get_order_tracking(order_id: int, customer: CustomerModel = Depends(current_customer)):
+    if reviewer.is_reviewer(customer.phone):
+        return reviewer.get_order(customer.phone, order_id)
     tracking = get_tracking_info(order_id, customer.phone)
     if not tracking:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -822,6 +848,9 @@ def get_order_tracking(order_id: int, customer: CustomerModel = Depends(current_
 @router.post("/customers/me/orders/{order_id}/delivery-code")
 @router.post("/customers/me/orders/{order_id}/delivery-otp")
 def create_delivery_otp(order_id: int, customer: CustomerModel = Depends(current_customer)):
+    if reviewer.is_reviewer(customer.phone):
+        reviewer.get_order(customer.phone, order_id)
+        raise HTTPException(409, "Demo delivery is already complete; no delivery code is required")
     db = SessionLocal()
     try:
         order = db.get(OrderModel, order_id)
@@ -841,6 +870,8 @@ def create_delivery_otp(order_id: int, customer: CustomerModel = Depends(current
 
 @router.get("/customers/me/orders/{order_id}/messages")
 def list_order_messages(order_id: int, customer: CustomerModel = Depends(current_customer)):
+    if reviewer.is_reviewer(customer.phone):
+        return {"messages": reviewer.get_order(customer.phone, order_id)["messages"]}
     messages = list_messages_for_customer(order_id, customer.phone)
     if messages is None:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -849,6 +880,8 @@ def list_order_messages(order_id: int, customer: CustomerModel = Depends(current
 
 @router.post("/customers/me/orders/{order_id}/messages")
 def send_order_message(order_id: int, payload: OrderMessageRequest, customer: CustomerModel = Depends(current_customer)):
+    if reviewer.is_reviewer(customer.phone):
+        return reviewer.append_entry(customer.phone, order_id, "messages", {"sender":"customer", "message":payload.message})
     message = add_message_by_customer(order_id, customer.phone, payload.message)
     if message is None:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -865,6 +898,8 @@ def submit_product_request(
     payload: ProductRequestPayload,
     customer: CustomerModel = Depends(current_customer),
 ):
+    if reviewer.is_reviewer(customer.phone):
+        return reviewer.append_entry(customer.phone, order_id, "product_requests", {"order_id":order_id, "request_text":payload.request_text.strip(), "status":"DEMO"})
     order = get_customer_order(order_id, customer.phone)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -890,3 +925,4 @@ def submit_product_request(
         }
     finally:
         db.close()
+
