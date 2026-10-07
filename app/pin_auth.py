@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from app.db import Base, SessionLocal
 from app.models import CustomerModel
 from app.phone_utils import is_valid_indian_mobile
+from app.reviewer import is_reviewer
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -65,7 +66,7 @@ def _refresh_hash(token: str) -> str:
 def _issue(db, customer: CustomerModel, device_id: str) -> dict:
     refresh = secrets.token_urlsafe(48)
     db.add(CustomerSessionModel(customer_id=customer.phone, device_id=device_id, refresh_token_hash=_refresh_hash(refresh), expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_DAYS)))
-    return {"access_token": _token(customer.phone, customer.name, customer.auth_version), "refresh_token": refresh, "token_type": "bearer", "expires_in": ACCESS_TOKEN_MINUTES * 60, "customer": {"phone": customer.phone, "name": customer.name}}
+    return {"access_token": _token(customer.phone, customer.name, customer.auth_version), "refresh_token": refresh, "token_type": "bearer", "expires_in": ACCESS_TOKEN_MINUTES * 60, "customer": {"phone": customer.phone, "name": customer.name, "is_reviewer": is_reviewer(customer.phone)}}
 
 def register(phone: str, name: str, pin: str, device_id: str) -> dict:
     phone = phone.strip()
@@ -126,3 +127,4 @@ def revoke(refresh_token: str) -> None:
         row=db.query(CustomerSessionModel).filter(CustomerSessionModel.refresh_token_hash==_refresh_hash(refresh_token), CustomerSessionModel.revoked_at.is_(None)).first()
         if row: row.revoked_at=datetime.now(timezone.utc); db.commit()
     finally: db.close()
+
