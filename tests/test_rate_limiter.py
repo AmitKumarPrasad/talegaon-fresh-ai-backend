@@ -17,7 +17,9 @@ def request_for(path: str, headers: list[tuple[bytes, bytes]] | None = None) -> 
         "scheme": "https",
         "server": ("test", 443),
     }
-    return Request(scope)
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+    return Request(scope, receive)
 
 
 class RateLimiterTests(unittest.IsolatedAsyncioTestCase):
@@ -58,3 +60,4 @@ class RateLimiterTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

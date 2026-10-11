@@ -76,7 +76,7 @@ def register(phone: str, name: str, pin: str, device_id: str) -> dict:
     db=SessionLocal()
     try:
         customer=db.get(CustomerModel, phone.strip())
-        if customer and db.get(PinCredentialModel, phone.strip()): raise HTTPException(409, "Account already exists")
+        if customer: raise HTTPException(409, "Account already exists. Contact support to securely set up or recover your PIN.")
         if not customer:
             customer=CustomerModel(phone=phone.strip(), name=name.strip() or "Customer"); db.add(customer); db.flush()
         cred=PinCredentialModel(customer_id=customer.phone, pin_hash=_pin_hash(pin))
@@ -127,4 +127,5 @@ def revoke(refresh_token: str) -> None:
         row=db.query(CustomerSessionModel).filter(CustomerSessionModel.refresh_token_hash==_refresh_hash(refresh_token), CustomerSessionModel.revoked_at.is_(None)).first()
         if row: row.revoked_at=datetime.now(timezone.utc); db.commit()
     finally: db.close()
+
 

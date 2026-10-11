@@ -94,6 +94,10 @@ def _ub64(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
 
 
+def _credential_version(partner: DeliveryPartnerModel) -> str:
+    return hashlib.sha256(partner.pin_hash.encode()).hexdigest()
+
+
 def _token(partner: DeliveryPartnerModel) -> str:
     now = datetime.now(timezone.utc)
     header = _b64(b'{"alg":"HS256","typ":"JWT"}')
@@ -101,6 +105,7 @@ def _token(partner: DeliveryPartnerModel) -> str:
         "sub": partner.phone,
         "name": partner.name,
         "role": "DELIVERY_PARTNER",
+        "credential_version": _credential_version(partner),
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=ACCESS_TOKEN_MINUTES)).timestamp()),
     }, separators=(",", ":")).encode())
@@ -157,6 +162,9 @@ def current_partner(authorization: str | None = Header(default=None)) -> Deliver
         partner = db.get(DeliveryPartnerModel, data["sub"])
         if not partner or not partner.active:
             raise HTTPException(status_code=401, detail="Partner account is inactive")
+        version = data.get("credential_version")
+        if not isinstance(version, str) or not hmac.compare_digest(version, _credential_version(partner)):
+            raise HTTPException(status_code=401, detail="Partner session revoked. Sign in again.")
         return partner
     finally:
         db.close()
@@ -605,6 +613,10 @@ def provision_partner(payload: PartnerProvisionRequest, request: Request):
         if partner:
             partner.name = payload.name.strip()
             partner.pin_hash = _pin_hash(payload.pin)
+            db.query(DeliveryPartnerSessionModel).filter(
+                DeliveryPartnerSessionModel.partner_phone == partner.phone,
+                DeliveryPartnerSessionModel.revoked_at.is_(None),
+            ).update({"revoked_at": datetime.now(timezone.utc)}, synchronize_session=False)
             partner.active = True
         else:
             partner = DeliveryPartnerModel(
@@ -721,3 +733,4 @@ def partner_ai_assistant(
     except Exception:
         raise HTTPException(status_code=503, detail="Delivery Partner Assistant is temporarily unavailable")
     return {"reply": reply}
+

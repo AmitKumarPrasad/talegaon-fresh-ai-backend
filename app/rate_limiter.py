@@ -1,4 +1,7 @@
 import os
+import hashlib
+
+from app.config import is_production_environment
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -6,6 +9,9 @@ from redis.asyncio import Redis
 
 _WINDOW_RULES = {
     "/auth/login": (10, 60),
+    "/partner/auth/login": (10, 60),
+    "/partner/auth/refresh": (30, 60),
+    "/partner/ai/assistant": (20, 60),
     "/auth/register": (5, 600),
     "/auth/refresh": (30, 60),
     "/auth/request-otp": (5, 600),
@@ -32,7 +38,7 @@ _redis: Redis | None = None
 
 
 def _environment() -> str:
-    return os.getenv("ENVIRONMENT", "development").lower()
+    return "production" if is_production_environment() else os.getenv("ENVIRONMENT", "development").lower()
 
 
 def _client() -> Redis:
@@ -107,7 +113,7 @@ def client_ip(request: Request) -> str:
 
 
 def rule_for(path: str) -> tuple[int, int] | None:
-    if path.startswith("/admin/"):
+    if path.startswith(("/admin/", "/partner/admin/")):
         return _ADMIN_RULE
     return _WINDOW_RULES.get(path)
 
@@ -125,6 +131,17 @@ async def enforce_rate_limit(request: Request) -> JSONResponse | None:
     key = f"tf:rl:v1:{request.url.path}:{client_ip(request)}"
     try:
         result = await _client().eval(_RATE_SCRIPT, 1, key, limit, window)
+        # Account-level ceiling also protects PIN login across different IPs.
+        if int(result[0]) and request.url.path in {"/auth/login", "/partner/auth/login"}:
+            try:
+                payload = await request.json()
+                phone = str(payload.get("phone", "")).strip()
+            except (ValueError, TypeError, AttributeError):
+                phone = ""
+            if phone:
+                account = hashlib.sha256(phone.encode()).hexdigest()
+                account_key = f"tf:rl:account:{request.url.path}:{account}"
+                result = await _client().eval(_RATE_SCRIPT, 1, account_key, 5, 900)
     except Exception:
         if _environment() == "production":
             return JSONResponse(
@@ -150,3 +167,4 @@ async def enforce_rate_limit(request: Request) -> JSONResponse | None:
             "Cache-Control": "no-store",
         },
     )
+
