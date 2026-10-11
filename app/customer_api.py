@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import json
 import hashlib
 import secrets
 import re
@@ -20,6 +21,7 @@ from app.pin_auth import (
 from app.db import SessionLocal
 from app.models import (
     AddressModel,
+    CheckoutRequestModel,
     ConversationStateModel,
     CustomerModel,
     OrderItemModel,
@@ -107,7 +109,7 @@ class AddressRequest(BaseModel):
     label: str = Field(min_length=1, max_length=50)
     address: str = Field(min_length=1, max_length=500)
     city: str = Field(min_length=1, max_length=100)
-    pincode: str = Field(min_length=6, max_length=6)
+    pincode: str = Field(pattern=r"^[1-9][0-9]{5}$")
     is_default: bool = False
 
 
@@ -123,6 +125,7 @@ class CartRequest(BaseModel):
 
 
 class OrderRequest(BaseModel):
+    idempotency_key: str | None = Field(default=None, min_length=16, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
     items: list[CartItem] = Field(min_length=1, max_length=50)
     address_id: int | None = None
     address: str | None = Field(default=None, max_length=500)
@@ -658,6 +661,13 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
         db.query(CustomerModel).filter(
             CustomerModel.phone == customer.phone
         ).with_for_update().first()
+        request_hash = hashlib.sha256(json.dumps(payload.model_dump(exclude={"idempotency_key"}), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        if payload.idempotency_key:
+            previous = db.get(CheckoutRequestModel, (customer.phone, payload.idempotency_key))
+            if previous:
+                if previous.request_hash != request_hash:
+                    raise HTTPException(409, "Checkout request changed. Start a new checkout.")
+                return previous.response
         address = payload.address
         if payload.address_id is not None:
             saved = db.get(AddressModel, payload.address_id)
@@ -671,7 +681,11 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
             if payload.payment_method and payload.payment_method.upper() != "COD":
                 raise HTTPException(400, "Reviewer orders use simulated COD only")
             quote = _quote_order(db, customer.phone, payload.items, payload.promo_code or "")
-            return reviewer.create_order(db, customer, payload, address, quote)
+            response = reviewer.create_order(db, customer, payload, address, quote, commit=False)
+            if payload.idempotency_key:
+                db.add(CheckoutRequestModel(customer_id=customer.phone, request_key=payload.idempotency_key, request_hash=request_hash, response=response))
+            db.commit()
+            return response
         promo_code = payload.promo_code.strip().upper() if payload.promo_code else None
         resolved_promo = _promo_rule(db, customer.phone, promo_code)
         order = OrderModel(
@@ -731,9 +745,11 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
                 from_status="PENDING",
                 to_status=next_status,
             ))
-        db.commit()
-        db.refresh(order)
+        db.flush()
         response = _order_dict(db, order)
+        if payload.idempotency_key:
+            db.add(CheckoutRequestModel(customer_id=customer.phone, request_key=payload.idempotency_key, request_hash=request_hash, response=response))
+        db.commit()
         try:
             notify_seller(
                 order_id=order.id,
@@ -925,4 +941,5 @@ def submit_product_request(
         }
     finally:
         db.close()
+
 
