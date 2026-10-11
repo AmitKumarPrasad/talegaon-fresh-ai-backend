@@ -187,3 +187,12 @@ class DeliveryPayoutLedgerModel(Base):
     status: Mapped[str] = mapped_column(String(20), default="PENDING", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+
+class CheckoutRequestModel(Base):
+    __tablename__ = "checkout_requests"
+    customer_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    request_key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    response: Mapped[dict] = mapped_column(JSON, nullable=False)

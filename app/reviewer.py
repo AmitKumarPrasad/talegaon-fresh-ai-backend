@@ -24,6 +24,10 @@ def is_reviewer(phone: str) -> bool:
 def require_service_area(address: str, phone: str) -> None:
     if is_reviewer(phone):
         return
+    pins = re.findall(r"(?<!\d)[1-9]\d{5}(?!\d)", address)
+    configured = {value.strip() for value in os.getenv("SERVICEABLE_PINCODES", "").split(",") if value.strip()}
+    if pins and (not pins[-1].startswith("41") or (configured and pins[-1] not in configured)):
+        raise HTTPException(400, "Delivery is not available for this PIN code.")
     if not re.search(r"\b(?:talegaon(?:\s+dabhade)?|pcmc|pimpri(?:[ -]+chinchwad)?|chinchwad|ravet|akurdi|nigdi|bhosari|wakad|pimple[ -]+(?:saudagar|gurav|nilakh)|moshi|punawale|tathawade|dapodi|(?:new[ -]+)?sangvi|kiwale|mamurdi|charholi|dudulgaon|talawade|chikhali|borhadewadi|kasarwadi|dighi|phugewadi)\b", address, re.I):
         raise HTTPException(400, "Delivery is available only in Talegaon and PCMC. Include your PCMC or Talegaon locality in the delivery address.")
 
@@ -42,7 +46,7 @@ def get_order(phone: str, order_id: int) -> dict:
         return dict(row.snapshot, order_id=row.id)
 
 
-def create_order(db, customer, payload, address, quote) -> dict:
+def create_order(db, customer, payload, address, quote, commit=True) -> dict:
     from app.models import ProductModel
     items = []
     for item in payload.items:
@@ -61,7 +65,9 @@ def create_order(db, customer, payload, address, quote) -> dict:
                              {"from_status":"CONFIRMED", "to_status":"DELIVERED", "created_at":now}])
     row = ReviewerOrderModel(customer_id=customer.phone, snapshot=snapshot)
     db.add(row)
-    db.commit()
+    db.flush()
+    if commit:
+        db.commit()
     db.refresh(row)
     return dict(row.snapshot, order_id=row.id)
 
@@ -79,3 +85,4 @@ def append_entry(phone: str, order_id: int, key: str, entry: dict) -> dict:
         row.snapshot = snapshot
         db.commit()
         return entry
+
