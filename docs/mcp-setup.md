@@ -67,6 +67,8 @@ customer JWTs are not sent to OpenAI or another network host. OpenAI receives
 the chat message and redacted catalog/order tool results. Responses are sent
 with `store=false`; this does not imply zero retention at the provider.
 All reasoning and tool-call items are replayed within that one request.
+Order lookups without an ID return only the authenticated customer's latest
+order; an explicitly supplied ID is never replaced by a guessed/latest ID.
 
 The loop allows at most three model rounds and four read-only tool calls,
 has a 40-second overall deadline and makes no automatic provider retries.

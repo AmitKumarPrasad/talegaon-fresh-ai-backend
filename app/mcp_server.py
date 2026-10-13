@@ -18,7 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.auth import current_customer
 from app.config import get_cors_allowed_origins, is_production_environment
-from app.models import ProductModel
+from app.models import OrderModel, ProductModel
 from app.db import SessionLocal
 from app.order_details import get_customer_order
 
@@ -142,11 +142,21 @@ def build_mcp():
 
     @server.tool(annotations=readonly)
     async def get_my_order_status(
-        ctx: Context, order_id: Annotated[int, Field(ge=1)],
+        ctx: Context, order_id: Annotated[int | None, Field(ge=1)] = None,
     ) -> OrderSnapshot:
-        """Read an order owned by the logged-in customer. No delivery codes or PII."""
+        """Read an owned order, or the latest owned order if no ID is supplied. No PII."""
         customer = _customer(ctx)
         try:
+            if order_id is None:
+                def latest_id():
+                    with SessionLocal() as db:
+                        row = db.query(OrderModel.id).filter(
+                            OrderModel.customer_id == customer.phone
+                        ).order_by(OrderModel.id.desc()).first()
+                        return row[0] if row else None
+                order_id = await run_in_threadpool(latest_id)
+                if order_id is None:
+                    raise ValueError("Order not found")
             order = await run_in_threadpool(get_customer_order, order_id, customer.phone)
         except SQLAlchemyError:
             raise ValueError("Order service temporarily unavailable") from None

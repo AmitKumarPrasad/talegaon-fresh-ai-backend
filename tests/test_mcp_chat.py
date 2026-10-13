@@ -104,6 +104,22 @@ async def test_other_customer_order_and_private_fields_not_sent(backend):
 
 
 @pytest.mark.asyncio
+async def test_latest_order_lookup_is_grounded_and_redacted(backend):
+    server, transport, _ = backend
+    factory, _, inputs = provider(
+        response([tool_call("get_my_order_status", {})]),
+        response(text="Your latest order is #201, confirmed."),
+    )
+    with patch("app.mcp_chat.AsyncOpenAI", factory):
+        async with server.session_manager.run():
+            await generate_mcp_reply("Mera latest order?", "Bearer " + create_token("919999999981", "Owner"), transport)
+    result = json.loads(inputs[1]["input"][-1]["output"])
+    assert result["order_id"] == 201
+    assert result["status"] == "CONFIRMED"
+    assert "PRIVATE ADDRESS" not in json.dumps(inputs)
+
+
+@pytest.mark.asyncio
 async def test_revoked_token_never_calls_provider(backend):
     server, transport, sessions = backend
     token = create_token("919999999981", "Owner")
