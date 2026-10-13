@@ -88,6 +88,7 @@ app = FastAPI(
     redoc_url=None if IS_PRODUCTION else "/redoc",
     openapi_url=None if IS_PRODUCTION else "/openapi.json",
 )
+app.state.customer_mcp_transport = customer_mcp_app
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_allowed_origins(),

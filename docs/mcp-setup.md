@@ -60,9 +60,25 @@ Do not paste customer credentials into ChatGPT connector fields.
 
 ## Scope and validation
 
-The existing Flutter chat endpoint has not yet been changed to use MCP. Model
-tool orchestration and admin/partner tools are follow-up integrations; they
-must retain their own role checks. There are no cancel/order/price-write tools.
+When `MCP_ENABLED=true`, the existing `/customers/me/ai/chat` endpoint uses
+the MCP tools with the existing Render `OPENAI_API_KEY` and `OPENAI_MODEL`.
+The backend connects to its own authenticated MCP ASGI transport in-process:
+customer JWTs are not sent to OpenAI or another network host. OpenAI receives
+the chat message and redacted catalog/order tool results. Responses are sent
+with `store=false`; this does not imply zero retention at the provider.
+All reasoning and tool-call items are replayed within that one request.
+
+The loop allows at most three model rounds and four read-only tool calls,
+has a 40-second overall deadline and makes no automatic provider retries.
+Each customer request gets a fresh MCP session and no shared conversation.
+Expired/revoked authentication, provider and transport failures return a safe
+503, without an ungrounded AI fallback. Incomplete/empty/budget-exceeded model
+responses direct the customer to Products/My Orders. MCP-disabled deployments
+keep the existing deterministic chat behavior. Reviewer accounts keep their
+isolated demo flow. No Flutter rebuild or additional API key is needed.
+
+Admin/partner tools are follow-up integrations and must retain their own role
+checks. There are no cancel/order/price-write tools.
 
 Run `python -m pytest tests/test_mcp_server.py -q` for transport initialization,
 tool discovery, real catalog reads, ownership isolation, revoked sessions,
