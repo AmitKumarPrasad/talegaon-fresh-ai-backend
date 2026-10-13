@@ -113,6 +113,8 @@ def client_ip(request: Request) -> str:
 
 
 def rule_for(path: str) -> tuple[int, int] | None:
+    if path == "/mcp" or path.startswith("/mcp/"):
+        return (30, 60)
     if path.startswith(("/admin/", "/partner/admin/")):
         return _ADMIN_RULE
     return _WINDOW_RULES.get(path)

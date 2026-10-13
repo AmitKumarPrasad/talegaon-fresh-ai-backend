@@ -11,3 +11,4 @@ alembic
 firebase-admin
 
 redis>=6.4,<7
+mcp==1.30.0
