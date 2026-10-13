@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
-from pydantic import Field
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -18,9 +18,31 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.auth import current_customer
 from app.config import get_cors_allowed_origins, is_production_environment
-from app.models import ProductModel
+from app.models import OrderModel, ProductModel
 from app.db import SessionLocal
 from app.order_details import get_customer_order
+
+
+class ProductSnapshot(BaseModel):
+    id: int
+    name: str
+    unit: str
+    category: str
+    price: float
+    in_stock: bool
+
+
+class CatalogSnapshot(BaseModel):
+    currency: str
+    products: list[ProductSnapshot]
+
+
+class OrderSnapshot(BaseModel):
+    order_id: int
+    status: str
+    total: float
+    payment_method: str | None
+    created_at: str | None
 
 
 def enabled() -> bool:
@@ -97,7 +119,7 @@ def build_mcp():
         ctx: Context,
         query: Annotated[str, Field(max_length=100)] = "",
         limit: Annotated[int, Field(ge=1, le=30)] = 20,
-    ) -> dict:
+    ) -> CatalogSnapshot:
         """Find products with current server prices and stock; prices are in INR."""
         _customer(ctx)
         def read_catalog():
@@ -107,12 +129,12 @@ def build_mcp():
                     # Escape LIKE wildcards so search is literal and bounded.
                     term = query.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
                     rows = rows.filter(ProductModel.name.ilike(f"%{term}%", escape="\\"))
-                return {"currency": "INR", "products": [
+                return CatalogSnapshot(currency="INR", products=[
                     {"id": row.id, "name": row.name, "unit": row.unit,
                      "category": row.category, "price": row.price,
                      "in_stock": row.in_stock}
                     for row in rows.limit(limit).all()
-                ]}
+                ])
         try:
             return await run_in_threadpool(read_catalog)
         except SQLAlchemyError:
@@ -120,19 +142,29 @@ def build_mcp():
 
     @server.tool(annotations=readonly)
     async def get_my_order_status(
-        ctx: Context, order_id: Annotated[int, Field(ge=1)],
-    ) -> dict:
-        """Read an order owned by the logged-in customer. No delivery codes or PII."""
+        ctx: Context, order_id: Annotated[int | None, Field(ge=1)] = None,
+    ) -> OrderSnapshot:
+        """Read an owned order, or the latest owned order if no ID is supplied. No PII."""
         customer = _customer(ctx)
         try:
+            if order_id is None:
+                def latest_id():
+                    with SessionLocal() as db:
+                        row = db.query(OrderModel.id).filter(
+                            OrderModel.customer_id == customer.phone
+                        ).order_by(OrderModel.id.desc()).first()
+                        return row[0] if row else None
+                order_id = await run_in_threadpool(latest_id)
+                if order_id is None:
+                    raise ValueError("Order not found")
             order = await run_in_threadpool(get_customer_order, order_id, customer.phone)
         except SQLAlchemyError:
             raise ValueError("Order service temporarily unavailable") from None
         if not order:
             # Identical response for nonexistent and somebody else's order.
             raise ValueError("Order not found")
-        return {key: order.get(key) for key in (
+        return OrderSnapshot(**{key: order.get(key) for key in (
             "order_id", "status", "total", "payment_method", "created_at",
-        )}
+        )})
 
     return server, CustomerAuth(server.streamable_http_app())

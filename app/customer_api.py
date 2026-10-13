@@ -4,7 +4,7 @@ import hashlib
 import secrets
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 import os
@@ -591,8 +591,9 @@ def clear_cart(customer: CustomerModel = Depends(current_customer)):
 
 
 @router.post("/customers/me/ai/chat")
-def mobile_ai_chat(
+async def mobile_ai_chat(
     payload: AiChatRequest,
+    request: Request,
     customer: CustomerModel = Depends(current_customer),
 ):
     if reviewer.is_reviewer(customer.phone):
@@ -603,7 +604,15 @@ def mobile_ai_chat(
         latest = demo_orders[0] if demo_orders else None
         return {"reply": (f"Demo order #{latest['order_id']}: Delivered. Total ₹{latest['total']:.2f}. No payment or real delivery is required." if latest else "Reviewer demo: browse products, add a delivery address anywhere, and place a COD demo order. No real delivery or payment is made.")}
     try:
-        reply = _mobile_ai_reply(payload.message, customer.phone)
+        transport = getattr(request.app.state, "customer_mcp_transport", None)
+        if transport is not None:
+            from app.mcp_chat import generate_mcp_reply
+            reply = await generate_mcp_reply(
+                payload.message, request.headers.get("authorization", ""), transport
+            )
+        else:
+            from starlette.concurrency import run_in_threadpool
+            reply = await run_in_threadpool(_mobile_ai_reply, payload.message, customer.phone)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="AI service is temporarily unavailable.") from exc
     return {"reply": reply}
