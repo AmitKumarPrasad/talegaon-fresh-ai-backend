@@ -4,6 +4,7 @@ import os
 import re
 import hmac
 import uuid
+from contextlib import asynccontextmanager
 from datetime import date
 
 from dotenv import load_dotenv
@@ -62,7 +63,21 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 IS_PRODUCTION = is_production_environment()
 
+from app.mcp_server import build_mcp, enabled as mcp_enabled
+
+customer_mcp, customer_mcp_app = build_mcp() if mcp_enabled() else (None, None)
+
+
+@asynccontextmanager
+async def app_lifespan(application):
+    if customer_mcp is not None:
+        async with customer_mcp.session_manager.run():
+            yield
+    else:
+        yield
+
 app = FastAPI(
+    lifespan=app_lifespan,
     title="Talegaon Fresh AI Agent API",
     description=(
         "Customer ordering, product catalog, order tracking, payment, seller, "
@@ -132,6 +147,8 @@ async def security_headers(request: Request, call_next):
 
 app.include_router(customer_router)
 app.include_router(partner_router)
+if customer_mcp_app is not None:
+    app.mount("/mcp", customer_mcp_app)
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN")
 WHATSAPP_APP_SECRET = os.getenv("WHATSAPP_APP_SECRET")
 validate_production_config()

@@ -1,5 +1,8 @@
 # Talegaon Fresh AI Backend
 
+Customer-scoped MCP tools and deployment/client configuration are documented
+in [docs/mcp-setup.md](docs/mcp-setup.md).
+
 Mobile-first backend for Talegaon Fresh, with optional AI assistance. WhatsApp and Razorpay integrations remain available in the codebase for later activation but are not required for the current mobile production deployment.
 
 ## Stack
