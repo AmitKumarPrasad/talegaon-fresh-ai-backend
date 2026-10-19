@@ -102,11 +102,12 @@ def _credential_version(partner: DeliveryPartnerModel) -> str:
     return hashlib.sha256(partner.pin_hash.encode()).hexdigest()
 
 
-def _token(partner: DeliveryPartnerModel) -> str:
+def _token(partner: DeliveryPartnerModel, session_id: int) -> str:
     now = datetime.now(timezone.utc)
     header = _b64(b'{"alg":"HS256","typ":"JWT"}')
     payload = _b64(json.dumps({
         "sub": partner.phone,
+        "sid": session_id,
         "name": partner.name,
         "role": "DELIVERY_PARTNER",
         "credential_version": _credential_version(partner),
@@ -142,19 +143,37 @@ def _refresh_hash(token: str) -> str:
 
 def _issue(db, partner: DeliveryPartnerModel, device_id: str) -> dict:
     refresh = secrets.token_urlsafe(48)
-    db.add(DeliveryPartnerSessionModel(
+    session = DeliveryPartnerSessionModel(
         partner_phone=partner.phone,
         device_id=device_id,
         refresh_token_hash=_refresh_hash(refresh),
         expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_DAYS),
-    ))
+    )
+    db.add(session)
+    db.flush()
     return {
-        "access_token": _token(partner),
+        "access_token": _token(partner, session.id),
         "refresh_token": refresh,
         "token_type": "bearer",
         "expires_in": ACCESS_TOKEN_MINUTES * 60,
         "partner": {"phone": partner.phone, "name": partner.name},
     }
+
+
+def _active_partner_session(db, data: dict) -> DeliveryPartnerSessionModel:
+    session_id = data.get("sid")
+    if type(session_id) is not int or session_id <= 0:
+        # Legacy access JWTs must refresh once to acquire a revocable session binding.
+        raise HTTPException(status_code=401, detail="Partner session must be refreshed")
+    session = db.get(DeliveryPartnerSessionModel, session_id)
+    if not session or session.partner_phone != data.get("sub") or session.revoked_at is not None:
+        raise HTTPException(status_code=401, detail="Partner session revoked. Sign in again.")
+    expires = session.expires_at
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if expires <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Partner session expired. Sign in again.")
+    return session
 
 
 def current_partner(authorization: str | None = Header(default=None)) -> DeliveryPartnerModel:
@@ -169,6 +188,7 @@ def current_partner(authorization: str | None = Header(default=None)) -> Deliver
         version = data.get("credential_version")
         if not isinstance(version, str) or not hmac.compare_digest(version, _credential_version(partner)):
             raise HTTPException(status_code=401, detail="Partner session revoked. Sign in again.")
+        _active_partner_session(db, data)
         return partner
     finally:
         db.close()
@@ -197,7 +217,7 @@ def partner_refresh(payload: PartnerRefreshRequest):
         row = db.query(DeliveryPartnerSessionModel).filter(
             DeliveryPartnerSessionModel.refresh_token_hash == _refresh_hash(payload.refresh_token),
             DeliveryPartnerSessionModel.revoked_at.is_(None),
-        ).first()
+        ).with_for_update().first()
         if not row:
             raise HTTPException(status_code=401, detail="Invalid refresh session")
         expires = row.expires_at
@@ -224,13 +244,17 @@ def partner_logout(
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Partner authentication required")
     data = _decode(authorization.split(" ", 1)[1].strip())
+    current_partner(authorization)
     db = SessionLocal()
     try:
+        session = _active_partner_session(db, data)
+        if session.device_id != payload.device_id:
+            raise HTTPException(status_code=401, detail="Logout device mismatch")
         sessions = db.query(DeliveryPartnerSessionModel).filter(
             DeliveryPartnerSessionModel.partner_phone == data["sub"],
             DeliveryPartnerSessionModel.device_id == payload.device_id,
             DeliveryPartnerSessionModel.revoked_at.is_(None),
-        ).all()
+        ).with_for_update().all()
         revoked_at = datetime.now(timezone.utc)
         for session in sessions:
             session.revoked_at = revoked_at
