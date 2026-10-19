@@ -775,14 +775,14 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
         
         # Notify delivery partners about the new order
         try:
-            partners = db.query(DeliveryPartnerModel).filter(DeliveryPartnerModel.fcm_token.isnot(None)).all()
+            partners = db.query(DeliveryPartnerModel).filter(
+                DeliveryPartnerModel.active.is_(True),
+                DeliveryPartnerModel.fcm_token.isnot(None),
+            ).all()
             for partner in partners:
                 NotificationService.notify_partner_new_order(
                     partner_fcm_token=partner.fcm_token,
                     order_id=order.id,
-                    customer_name=customer.name,
-                    delivery_address=order.address,
-                    total_amount=order.total,
                 )
         except Exception:
             import logging
