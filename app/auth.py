@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Header, HTTPException
@@ -167,7 +168,7 @@ def request_otp(phone: str, name: str | None = None, reveal_otp: bool = False) -
         db.close()
 
 
-def verify_otp(phone: str, otp: str, name: str | None = None) -> dict:
+def verify_otp(phone: str, otp: str, name: str | None = None, device_id: str | None = None) -> dict:
     db = SessionLocal()
     try:
         customer = db.get(CustomerModel, phone.strip())
@@ -215,8 +216,16 @@ def verify_otp(phone: str, otp: str, name: str | None = None) -> dict:
         customer.otp_locked_until = None
         customer.otp_request_count = 0
         customer.otp_window_started_at = None
+        # OTP and PIN authentication must issue the same revocable session
+        # format, including when an existing PIN customer verifies an OTP.
+        from app.pin_auth import _issue
+
+        session_device = device_id or ("verified-otp-" + secrets.token_urlsafe(24))
+        if not isinstance(session_device, str) or not 16 <= len(session_device) <= 200:
+            raise HTTPException(status_code=400, detail="Invalid session device")
+        result = _issue(db, customer, session_device)
         db.commit()
-        return {"token": create_token(customer.phone, customer.name, customer.auth_version), "customer": {"phone": customer.phone, "name": customer.name}}
+        return {**result, "token": result["access_token"], "device_id": session_device}
     finally:
         db.close()
 

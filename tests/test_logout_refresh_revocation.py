@@ -105,3 +105,19 @@ def test_refresh_rotates_access_session_and_rejects_expired_session(sessions):
     with pytest.raises(HTTPException) as error:
         auth.current_customer("Bearer " + refreshed["access_token"])
     assert error.value.status_code == 401
+
+
+def test_verified_otp_for_pin_customer_returns_usable_revocable_session(sessions, monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("DEV_OTP", "456789")
+    pin_auth.register("9999999999", "First", "123456", "pin-registration-device")
+    requested = auth.request_otp("9999999999")
+    verified = auth.verify_otp("9999999999", requested["demo_otp"])
+    assert verified["token"] == verified["access_token"]
+    assert auth.current_customer("Bearer " + verified["token"]).phone == "9999999999"
+    rotated = pin_auth.refresh(verified["refresh_token"], verified["device_id"])
+    assert auth.current_customer("Bearer " + rotated["access_token"]).phone == "9999999999"
+    pin_auth.revoke(rotated["refresh_token"])
+    with pytest.raises(HTTPException) as error:
+        auth.current_customer("Bearer " + rotated["access_token"])
+    assert error.value.status_code == 401
