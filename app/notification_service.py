@@ -136,14 +136,14 @@ class NotificationService:
 
     @staticmethod
     def notify_partner_new_order(
-        partner_fcm_token: str, order_id: int, customer_name: str,
+        partner_fcm_token: str, order_id: int, customer_name: str = "",
         delivery_address: str = "", total_amount: float | None = None,
     ) -> bool:
-        """Notify a delivery partner about a new order."""
+        """Broadcast availability without customer PII before assignment."""
         return NotificationService.send_notification_to_partner(
             fcm_token=partner_fcm_token,
             title="New Order",
-            body=f"New order from {customer_name}" + (f" • {delivery_address}" if delivery_address else ""),
+            body="A new delivery order is available.",
             order_id=order_id,
             data={"order_id": str(order_id), "event_type": "new_order"},
         )
