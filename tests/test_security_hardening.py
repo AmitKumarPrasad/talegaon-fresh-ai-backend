@@ -20,14 +20,17 @@ def test_existing_customer_without_pin_cannot_register_or_get_session():
 def test_partner_pin_change_invalidates_old_access_token(monkeypatch):
     monkeypatch.setenv('JWT_SECRET', 'local-test-key-that-is-long-enough-for-tests')
     partner = SimpleNamespace(phone='9000000000', name='Partner', active=True, pin_hash='old-hash')
-    token = partner_api._token(partner)
+    token = partner_api._token(partner, 1)
     partner.pin_hash = 'new-hash'
-    db = MagicMock(); db.get.return_value = partner
+    from datetime import datetime, timedelta, timezone
+    session = SimpleNamespace(partner_phone=partner.phone, revoked_at=None, expires_at=datetime.now(timezone.utc) + timedelta(days=1))
+    db = MagicMock()
+    db.get.side_effect = lambda model, key: partner if model is partner_api.DeliveryPartnerModel else session
     with patch.object(partner_api, 'SessionLocal', return_value=db):
         with pytest.raises(HTTPException) as error:
             partner_api.current_partner('Bearer ' + token)
         assert error.value.status_code == 401
-        new_token = partner_api._token(partner)
+        new_token = partner_api._token(partner, 1)
         assert partner_api.current_partner('Bearer ' + new_token) is partner
 
 
@@ -92,3 +95,4 @@ def test_account_limit_preserves_request_body_for_login_handler():
     assert response.status_code == 200
     assert response.json()['phone'] == '9000000000'
     assert redis.eval.await_count == 2
+
