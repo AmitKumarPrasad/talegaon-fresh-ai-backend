@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -12,19 +13,22 @@ from pydantic import BaseModel, Field, field_validator
 from app.db import SessionLocal
 from app.admin_auth import is_admin_session
 from app.models import (
+    CustomerModel,
+    OrderStatusHistoryModel,
     DeliveryPartnerModel,
     DeliveryPartnerSessionModel,
     DeliveryPayoutLedgerModel,
     OrderItemModel,
     OrderModel,
 )
-from app.order_status import transition_order
+from app.order_status import ALLOWED_TRANSITIONS
 from app.phone_utils import is_valid_indian_mobile
 from app.pin_auth import _pin_hash, _pin_matches
 from app.openai_service import generate_partner_reply
 from app.notification_service import NotificationService
 
 router = APIRouter(prefix="/partner", tags=["delivery-partner"])
+logger = logging.getLogger(__name__)
 
 
 def _delivery_otp_hash(otp: str) -> str:
@@ -334,6 +338,42 @@ def partner_update_location(
         db.close()
 
 
+def _transition_delivery_order(db, order: OrderModel, new_status: str) -> bool:
+    """Stage the order transition in the same transaction as delivery and payout.
+
+    The conditional write also makes concurrent attempts compete for one transition.
+    A failed ledger insert or commit rolls back the status and history together.
+    """
+    previous_status = order.status
+    if new_status not in ALLOWED_TRANSITIONS.get(previous_status, set()):
+        return False
+    updated = db.query(OrderModel).filter(
+        OrderModel.id == order.id,
+        OrderModel.status == previous_status,
+        OrderModel.delivery_status == order.delivery_status,
+        OrderModel.delivery_person_phone == order.delivery_person_phone,
+    ).update({OrderModel.status: new_status}, synchronize_session=False)
+    if updated != 1:
+        return False
+    order.status = new_status
+    db.add(OrderStatusHistoryModel(
+        order_id=order.id, from_status=previous_status, to_status=new_status,
+    ))
+    return True
+
+
+def _notify_delivery_transition(db, order: OrderModel) -> None:
+    # Push failures must never undo a successfully committed delivery/payout.
+    try:
+        customer = db.get(CustomerModel, order.customer_id)
+        if customer and customer.fcm_token:
+            NotificationService.notify_customer_order_status(
+                customer.fcm_token, order.id, order.status,
+            )
+    except Exception:
+        logger.exception("Order status push failed order_id=%s", order.id)
+
+
 @router.patch("/orders/{order_id}/status")
 def partner_update_status(
     order_id: int,
@@ -345,7 +385,7 @@ def partner_update_status(
         raise HTTPException(status_code=400, detail="Invalid delivery status")
     db = SessionLocal()
     try:
-        order = db.get(OrderModel, order_id)
+        order = db.query(OrderModel).filter(OrderModel.id == order_id).with_for_update().first()
         if not order or order.delivery_person_phone != partner.phone:
             raise HTTPException(status_code=404, detail="Assigned order not found")
         if order.status == "CANCELLED":
@@ -356,7 +396,7 @@ def partner_update_status(
         if requested == "OUT_FOR_DELIVERY":
             if order.status != "PACKING":
                 raise HTTPException(status_code=409, detail="Order must be PACKING before pickup")
-            if not transition_order(order_id, "OUT_FOR_DELIVERY"):
+            if not _transition_delivery_order(db, order, "OUT_FOR_DELIVERY"):
                 raise HTTPException(status_code=409, detail="Order status cannot move to OUT_FOR_DELIVERY")
         if requested == "DELIVERED":
             raise HTTPException(
@@ -365,6 +405,8 @@ def partner_update_status(
             )
         order.delivery_status = requested
         db.commit()
+        if requested == "OUT_FOR_DELIVERY":
+            _notify_delivery_transition(db, order)
         return _order_dict(db, order)
     finally:
         db.close()
@@ -383,7 +425,7 @@ def partner_complete_delivery(
 ):
     db = SessionLocal()
     try:
-        order = db.get(OrderModel, order_id)
+        order = db.query(OrderModel).filter(OrderModel.id == order_id).with_for_update().first()
         if not order or order.delivery_person_phone != partner.phone:
             raise HTTPException(status_code=404, detail="Assigned order not found")
         if order.status == "CANCELLED":
@@ -407,7 +449,7 @@ def partner_complete_delivery(
             # 401 is reserved for partner session authentication. Clients retry
             # it after refreshing, which would count one wrong OTP twice.
             raise HTTPException(status_code=400, detail="Invalid delivery OTP")
-        if not transition_order(order_id, "DELIVERED"):
+        if not _transition_delivery_order(db, order, "DELIVERED"):
             raise HTTPException(status_code=409, detail="Order status cannot move to DELIVERED")
         order.delivery_status = "DELIVERED"
         order.delivery_otp_hash = None
@@ -447,6 +489,7 @@ def partner_complete_delivery(
                 status="PENDING",
             ))
         db.commit()
+        _notify_delivery_transition(db, order)
         return _order_dict(db, order)
     finally:
         db.close()
@@ -733,4 +776,5 @@ def partner_ai_assistant(
     except Exception:
         raise HTTPException(status_code=503, detail="Delivery Partner Assistant is temporarily unavailable")
     return {"reply": reply}
+
 
