@@ -203,7 +203,18 @@ def logout_customer(customer: CustomerModel) -> None:
         row = db.get(CustomerModel, customer.phone)
         if not row:
             return
+        # Refresh tokens must be revoked in the same transaction as access
+        # tokens; otherwise an old session can immediately undo logout.
+        from app.pin_auth import CustomerSessionModel
+
         row.auth_version += 1
+        db.query(CustomerSessionModel).filter(
+            CustomerSessionModel.customer_id == row.phone,
+            CustomerSessionModel.revoked_at.is_(None),
+        ).update(
+            {"revoked_at": datetime.now(timezone.utc)},
+            synchronize_session=False,
+        )
         db.commit()
     finally:
         db.close()
