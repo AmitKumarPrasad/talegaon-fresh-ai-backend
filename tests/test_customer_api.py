@@ -690,3 +690,40 @@ def test_ai_help_request_uses_deterministic_help_response():
     assert response.status_code == 200
     assert "tracking" in response.json()["reply"].lower()
     generate.assert_not_called()
+
+
+def test_new_order_alert_excludes_disabled_partners_and_customer_pii():
+    from app.db import SessionLocal
+    from app.models import DeliveryPartnerModel
+
+    headers = {"Authorization": "Bearer " + auth()}
+    with SessionLocal() as db:
+        db.add_all([
+            DeliveryPartnerModel(phone="9888888881", name="Active",
+                                 pin_hash="unused-test-hash", active=True,
+                                 fcm_token="active-partner-device-token"),
+            DeliveryPartnerModel(phone="9888888882", name="Disabled",
+                                 pin_hash="unused-test-hash", active=False,
+                                 fcm_token="disabled-partner-device-token"),
+            DeliveryPartnerModel(phone="9888888883", name="No push",
+                                 pin_hash="unused-test-hash", active=True),
+        ])
+        db.commit()
+    address = "Private Flat 23, Main Road, Talegaon, 410507"
+    with patch(
+        "app.notification_service.NotificationService.send_notification_to_partner",
+        return_value=True,
+    ) as send:
+        response = client.post("/customers/me/orders", headers=headers, json={
+            "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 1}],
+            "address": address,
+            "payment_method": "COD",
+        })
+    assert response.status_code == 200
+    send.assert_called_once()
+    alert = send.call_args.kwargs
+    assert alert["fcm_token"] == "active-partner-device-token"
+    assert alert["body"] == "A new delivery order is available."
+    assert "Test User" not in str(alert)
+    assert address not in str(alert)
+    assert alert["order_id"] == response.json()["order_id"]
