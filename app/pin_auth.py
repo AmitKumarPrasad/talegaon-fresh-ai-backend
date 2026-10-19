@@ -52,10 +52,10 @@ def _pin_matches(pin: str, encoded: str) -> bool:
     except (ValueError, TypeError):
         return False
 
-def _token(phone: str, name: str, version: int) -> str:
+def _token(phone: str, name: str, version: int, session_hash: str) -> str:
     now = datetime.now(timezone.utc)
     header = _b64(b'{"alg":"HS256","typ":"JWT"}')
-    payload = _b64(json.dumps({"sub": phone, "name": name, "ver": version, "iat": int(now.timestamp()), "exp": int((now + timedelta(minutes=ACCESS_TOKEN_MINUTES)).timestamp())}, separators=(",", ":")).encode())
+    payload = _b64(json.dumps({"sub": phone, "name": name, "ver": version, "sid": session_hash, "iat": int(now.timestamp()), "exp": int((now + timedelta(minutes=ACCESS_TOKEN_MINUTES)).timestamp())}, separators=(",", ":")).encode())
     signing = (header + "." + payload).encode()
     signature = hmac.new(_secret().encode(), signing, hashlib.sha256).digest()
     return header + "." + payload + "." + _b64(signature)
@@ -65,8 +65,9 @@ def _refresh_hash(token: str) -> str:
 
 def _issue(db, customer: CustomerModel, device_id: str) -> dict:
     refresh = secrets.token_urlsafe(48)
-    db.add(CustomerSessionModel(customer_id=customer.phone, device_id=device_id, refresh_token_hash=_refresh_hash(refresh), expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_DAYS)))
-    return {"access_token": _token(customer.phone, customer.name, customer.auth_version), "refresh_token": refresh, "token_type": "bearer", "expires_in": ACCESS_TOKEN_MINUTES * 60, "customer": {"phone": customer.phone, "name": customer.name, "is_reviewer": is_reviewer(customer.phone)}}
+    session_hash = _refresh_hash(refresh)
+    db.add(CustomerSessionModel(customer_id=customer.phone, device_id=device_id, refresh_token_hash=session_hash, expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_DAYS)))
+    return {"access_token": _token(customer.phone, customer.name, customer.auth_version, session_hash), "refresh_token": refresh, "token_type": "bearer", "expires_in": ACCESS_TOKEN_MINUTES * 60, "customer": {"phone": customer.phone, "name": customer.name, "is_reviewer": is_reviewer(customer.phone)}}
 
 def register(phone: str, name: str, pin: str, device_id: str) -> dict:
     phone = phone.strip()

@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Header, HTTPException
@@ -77,6 +78,30 @@ def current_customer(authorization: str | None = Header(default=None)) -> Custom
             raise HTTPException(status_code=401, detail="Customer not found")
         if int(data.get("ver", 0)) != customer.auth_version:
             raise HTTPException(status_code=401, detail="Session revoked")
+        # PIN access tokens are bound to the refresh-session row so a
+        # device logout immediately invalidates that device's access token.
+        from app.pin_auth import CustomerSessionModel, PinCredentialModel
+
+        session_hash = data.get("sid")
+        if session_hash is not None:
+            if not isinstance(session_hash, str):
+                raise HTTPException(status_code=401, detail="Invalid session")
+            session = db.query(CustomerSessionModel).filter(
+                CustomerSessionModel.refresh_token_hash == session_hash,
+                CustomerSessionModel.customer_id == customer.phone,
+                CustomerSessionModel.revoked_at.is_(None),
+            ).first()
+            if not session:
+                raise HTTPException(status_code=401, detail="Session revoked")
+            expires = session.expires_at
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=timezone.utc)
+            if expires <= datetime.now(timezone.utc):
+                raise HTTPException(status_code=401, detail="Session expired")
+        elif db.get(PinCredentialModel, customer.phone) is not None:
+            # Existing PIN clients can obtain a bound token using refresh.
+            # Never let an older unbound token bypass session revocation.
+            raise HTTPException(status_code=401, detail="Refresh session required")
         return customer
     finally:
         db.close()
@@ -143,7 +168,7 @@ def request_otp(phone: str, name: str | None = None, reveal_otp: bool = False) -
         db.close()
 
 
-def verify_otp(phone: str, otp: str, name: str | None = None) -> dict:
+def verify_otp(phone: str, otp: str, name: str | None = None, device_id: str | None = None) -> dict:
     db = SessionLocal()
     try:
         customer = db.get(CustomerModel, phone.strip())
@@ -191,8 +216,16 @@ def verify_otp(phone: str, otp: str, name: str | None = None) -> dict:
         customer.otp_locked_until = None
         customer.otp_request_count = 0
         customer.otp_window_started_at = None
+        # OTP and PIN authentication must issue the same revocable session
+        # format, including when an existing PIN customer verifies an OTP.
+        from app.pin_auth import _issue
+
+        session_device = device_id or ("verified-otp-" + secrets.token_urlsafe(24))
+        if not isinstance(session_device, str) or not 16 <= len(session_device) <= 200:
+            raise HTTPException(status_code=400, detail="Invalid session device")
+        result = _issue(db, customer, session_device)
         db.commit()
-        return {"token": create_token(customer.phone, customer.name, customer.auth_version), "customer": {"phone": customer.phone, "name": customer.name}}
+        return {**result, "token": result["access_token"], "device_id": session_device}
     finally:
         db.close()
 
