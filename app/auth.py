@@ -77,6 +77,30 @@ def current_customer(authorization: str | None = Header(default=None)) -> Custom
             raise HTTPException(status_code=401, detail="Customer not found")
         if int(data.get("ver", 0)) != customer.auth_version:
             raise HTTPException(status_code=401, detail="Session revoked")
+        # PIN access tokens are bound to the refresh-session row so a
+        # device logout immediately invalidates that device's access token.
+        from app.pin_auth import CustomerSessionModel, PinCredentialModel
+
+        session_hash = data.get("sid")
+        if session_hash is not None:
+            if not isinstance(session_hash, str):
+                raise HTTPException(status_code=401, detail="Invalid session")
+            session = db.query(CustomerSessionModel).filter(
+                CustomerSessionModel.refresh_token_hash == session_hash,
+                CustomerSessionModel.customer_id == customer.phone,
+                CustomerSessionModel.revoked_at.is_(None),
+            ).first()
+            if not session:
+                raise HTTPException(status_code=401, detail="Session revoked")
+            expires = session.expires_at
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=timezone.utc)
+            if expires <= datetime.now(timezone.utc):
+                raise HTTPException(status_code=401, detail="Session expired")
+        elif db.get(PinCredentialModel, customer.phone) is not None:
+            # Existing PIN clients can obtain a bound token using refresh.
+            # Never let an older unbound token bypass session revocation.
+            raise HTTPException(status_code=401, detail="Refresh session required")
         return customer
     finally:
         db.close()
