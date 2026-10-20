@@ -144,7 +144,7 @@ class AiChatRequest(BaseModel):
 
 _PROMO_RULES = {
     "FRESH10": {"percent": 0.10, "max_discount": 50.0, "min_order": 0.0},
-    "WELCOME50": {"flat_discount": 50.0, "min_order": 199.0},
+    "WELCOME50": {"flat_discount": 50.0, "min_order": 499.0, "first_order_only": True},
     "FRESHORA20": {"percent": 0.20, "max_discount": 100.0, "min_order": 499.0},
 }
 _DELIVERY_THRESHOLD = 199.0
@@ -158,6 +158,13 @@ def _promo_rule(db, customer_id: str, promo_code: str | None) -> tuple[str, dict
     code = promo_code.strip().upper()
     rule = _PROMO_RULES.get(code)
     if rule is not None:
+        if rule.get("first_order_only") and db.query(OrderModel.id).filter(
+            OrderModel.customer_id == customer_id
+        ).first():
+            raise HTTPException(
+                status_code=400,
+                detail="This promo code is only valid on your first order.",
+            )
         return code, rule
 
     referrer = db.query(CustomerModel).filter(

@@ -260,13 +260,13 @@ def test_customer_promo_rules_keep_configured_caps_and_minimums():
     headers = {"Authorization": "Bearer " + auth()}
     welcome = client.post("/customers/me/promos/validate", headers=headers, json={
         "promo_code": "WELCOME50",
-        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 5}],
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 13}],
     })
     assert welcome.status_code == 200
-    assert welcome.json()["subtotal"] == 200
+    assert welcome.json()["subtotal"] == 520
     assert welcome.json()["discount_amount"] == 50
     assert welcome.json()["delivery_fee"] == 0
-    assert welcome.json()["total"] == 150
+    assert welcome.json()["total"] == 470
 
     capped = client.post("/customers/me/promos/validate", headers=headers, json={
         "promo_code": "FRESHORA20",
@@ -727,3 +727,86 @@ def test_new_order_alert_excludes_disabled_partners_and_customer_pii():
     assert "Test User" not in str(alert)
     assert address not in str(alert)
     assert alert["order_id"] == response.json()["order_id"]
+
+
+@pytest.mark.parametrize("catalog_price,expected_status", [(498.99, 400), (499.0, 200)])
+def test_welcome50_boundary_uses_server_prices_for_quote_and_checkout(catalog_price, expected_status):
+    headers = {"Authorization": "Bearer " + auth()}
+    from app.db import SessionLocal
+    with SessionLocal() as db:
+        product = db.query(ProductModel).filter_by(name="Tomato").one()
+        product.price = catalog_price
+        db.commit()
+    # A forged client price must neither unlock the minimum nor change the charge.
+    items = [{"name": "Tomato", "unit": "1 kg", "price": 9999, "quantity": 1}]
+    quote = client.post("/customers/me/promos/validate", headers=headers, json={
+        "promo_code": " welcome50 ", "items": items,
+    })
+    assert quote.status_code == expected_status
+    checkout_payload = {
+        "items": items, "promo_code": "WELCOME50",
+        "address": "Main Road, Talegaon, 410507", "payment_method": "COD",
+        "idempotency_key": "welcome50-first-checkout",
+    }
+    order = client.post("/customers/me/orders", headers=headers, json=checkout_payload)
+    assert order.status_code == expected_status
+    if expected_status == 200:
+        assert quote.json()["subtotal"] == 499
+        assert quote.json()["discount_amount"] == 50
+        assert quote.json()["delivery_fee"] == 0
+        assert quote.json()["total"] == 449
+        assert order.json()["discount_amount"] == 50
+        assert order.json()["delivery_fee"] == 0
+        assert order.json()["total"] == 449
+        replay = client.post("/customers/me/orders", headers=headers, json=checkout_payload)
+        assert replay.status_code == 200
+        assert replay.json() == order.json()
+        # Actual first checkout consumes eligibility for any new checkout.
+        assert client.post("/customers/me/promos/validate", headers=headers, json={
+            "promo_code": "WELCOME50", "items": items,
+        }).status_code == 400
+        assert client.post("/customers/me/orders", headers=headers, json={
+            "items": items, "promo_code": "WELCOME50",
+            "address": "Main Road, Talegaon, 410507", "payment_method": "COD",
+        }).status_code == 400
+    with SessionLocal() as db:
+        assert db.query(OrderModel).count() == (1 if expected_status == 200 else 0)
+        product = db.query(ProductModel).filter_by(name="Tomato").one()
+        assert product.stock_quantity == (9 if expected_status == 200 else 10)
+
+
+@pytest.mark.parametrize("prior_status", ["CONFIRMED", "DELIVERED", "CANCELLED"])
+def test_welcome50_rejects_any_existing_order_even_without_previous_discount(prior_status):
+    headers = {"Authorization": "Bearer " + auth()}
+    from app.db import SessionLocal
+    from app.models import CustomerModel
+    with SessionLocal() as db:
+        customer = db.query(CustomerModel).one()
+        db.add(OrderModel(customer_id=customer.phone, status=prior_status, total=40))
+        product = db.query(ProductModel).filter_by(name="Tomato").one()
+        product.price = 499
+        db.commit()
+    items = [{"name": "Tomato", "unit": "1 kg", "price": 499, "quantity": 1}]
+    quote = client.post("/customers/me/promos/validate", headers=headers, json={
+        "promo_code": "WELCOME50", "items": items,
+    })
+    assert quote.status_code == 400
+    assert "first order" in quote.json()["detail"]
+    checkout = client.post("/customers/me/orders", headers=headers, json={
+        "items": items, "promo_code": "WELCOME50",
+        "address": "Main Road, Talegaon, 410507", "payment_method": "COD",
+    })
+    assert checkout.status_code == 400
+    with SessionLocal() as db:
+        assert db.query(OrderModel).count() == 1
+        assert db.query(ProductModel).filter_by(name="Tomato").one().stock_quantity == 10
+
+
+def test_welcome50_cannot_be_stacked_by_combining_codes():
+    headers = {"Authorization": "Bearer " + auth()}
+    response = client.post("/customers/me/promos/validate", headers=headers, json={
+        "promo_code": "WELCOME50,FRESH10",
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 13}],
+    })
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid promo code."
