@@ -143,6 +143,7 @@ class AiChatRequest(BaseModel):
 
 
 _PROMO_RULES = {
+    "FRESH10": {"percent": 0.10, "max_discount": 50.0, "min_order": 0.0},
     "SHOP200": {"flat_discount": 20.0, "min_order": 200.0},
     "WELCOME50": {"flat_discount": 50.0, "min_order": 500.0, "first_order_only": True},
     "FRESHORA20": {"percent": 0.20, "max_discount": 100.0, "min_order": 499.0},
