@@ -41,6 +41,44 @@ def delivery_client(monkeypatch):
     engine.dispose()
 
 
+def test_partner_cannot_pick_up_order_until_store_marks_it_packing(delivery_client):
+    client, factory = delivery_client
+    with factory() as db:
+        order = db.get(OrderModel, 1)
+        order.status = "CONFIRMED"
+        order.delivery_status = "ACCEPTED"
+        db.commit()
+
+    response = client.patch(
+        "/partner/orders/1/status", json={"status": "PICKED_UP"}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Store is still packing this order. Ask the store to mark it as PACKING before pickup."
+    )
+    with factory() as db:
+        order = db.get(OrderModel, 1)
+        assert order.status == "CONFIRMED"
+        assert order.delivery_status == "ACCEPTED"
+
+
+def test_partner_can_pick_up_order_after_store_marks_it_packing(delivery_client):
+    client, factory = delivery_client
+    with factory() as db:
+        order = db.get(OrderModel, 1)
+        order.status = "PACKING"
+        order.delivery_status = "ACCEPTED"
+        db.commit()
+
+    response = client.patch(
+        "/partner/orders/1/status", json={"status": "PICKED_UP"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["delivery_status"] == "PICKED_UP"
+
+
 def test_incorrect_delivery_otp_is_a_validation_error_not_session_expiry(delivery_client):
     client, factory = delivery_client
     response = client.post(
