@@ -412,22 +412,18 @@ def partner_update_status(
         order = db.query(OrderModel).filter(OrderModel.id == order_id).with_for_update().first()
         if not order or order.delivery_person_phone != partner.phone:
             raise HTTPException(status_code=404, detail="Assigned order not found")
-        # Re-read mutable order state under the row lock. This prevents a stale
-        # ORM identity value from authorizing pickup after the store has changed it.
-        db.refresh(order, attribute_names=["status", "delivery_status"])
-        order_status = (order.status or "").strip().upper()
-        if order_status == "CANCELLED":
+        if order.status == "CANCELLED":
             raise HTTPException(status_code=409, detail="Order was cancelled by the customer")
-        current = (order.delivery_status or "ASSIGNED").strip().upper()
+        current = (order.delivery_status or "ASSIGNED").upper()
         if requested not in DELIVERY_TRANSITIONS.get(current, set()):
             raise HTTPException(status_code=409, detail=f"Invalid delivery transition from {current} to {requested}")
-        if requested == "PICKED_UP" and order_status != "PACKING":
+        if requested == "PICKED_UP" and order.status != "PACKING":
             raise HTTPException(
                 status_code=409,
                 detail="Store is still packing this order. Ask the store to mark it as PACKING before pickup.",
             )
         if requested == "OUT_FOR_DELIVERY":
-            if order_status != "PACKING":
+            if order.status != "PACKING":
                 raise HTTPException(
                     status_code=409,
                     detail="The store has not marked this order as PACKING. Refresh and contact the store before starting delivery.",
