@@ -250,7 +250,7 @@ def test_customer_shop200_quote_and_order_use_catalog_prices_and_delivery_fee():
         "promo_code": "SHOP200",
     })
     assert order.status_code == 200
-    assert order.json()["promo_code"] == "FRESH10"
+    assert order.json()["promo_code"] == "SHOP200"
     assert order.json()["discount_amount"] == 20
     assert order.json()["delivery_fee"] == 0
     assert order.json()["total"] == 180
