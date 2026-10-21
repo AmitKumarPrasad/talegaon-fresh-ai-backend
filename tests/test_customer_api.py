@@ -223,37 +223,37 @@ def test_customer_upi_payment_link_requires_upi_order():
     assert response.status_code == 400
 
 
-def test_customer_promo_quote_and_order_use_catalog_prices_and_delivery_fee():
+def test_customer_shop200_quote_and_order_use_catalog_prices_and_delivery_fee():
     token = auth()
     headers = {"Authorization": "Bearer " + token}
-    items = [{"name": "Tomato", "unit": "1 kg", "price": 999, "quantity": 2}]
+    items = [{"name": "Tomato", "unit": "1 kg", "price": 999, "quantity": 5}]
 
     quote = client.post(
         "/customers/me/promos/validate",
         headers=headers,
-        json={"promo_code": "fresh10", "items": items},
+        json={"promo_code": "shop200", "items": items},
     )
 
     assert quote.status_code == 200
     assert quote.json() == {
-        "promo_code": "FRESH10",
-        "subtotal": 80.0,
-        "delivery_fee": 20.0,
-        "discount_amount": 8.0,
-        "total": 92.0,
+        "promo_code": "SHOP200",
+        "subtotal": 200.0,
+        "delivery_fee": 0.0,
+        "discount_amount": 20.0,
+        "total": 180.0,
     }
 
     order = client.post("/customers/me/orders", headers=headers, json={
         "items": items,
         "address": "Main Road, Talegaon, 410507",
         "payment_method": "COD",
-        "promo_code": "FRESH10",
+        "promo_code": "SHOP200",
     })
     assert order.status_code == 200
     assert order.json()["promo_code"] == "FRESH10"
-    assert order.json()["discount_amount"] == 8
-    assert order.json()["delivery_fee"] == 20
-    assert order.json()["total"] == 92
+    assert order.json()["discount_amount"] == 20
+    assert order.json()["delivery_fee"] == 0
+    assert order.json()["total"] == 180
 
 
 def test_shop200_promo_requires_200_and_returns_flat_discount():
