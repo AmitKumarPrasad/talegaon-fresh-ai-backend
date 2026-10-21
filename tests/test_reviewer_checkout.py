@@ -58,7 +58,7 @@ def test_reviewer_worldwide_isolated_and_authenticated(review):
     assert client.get('/customers/me/orders').status_code==401
     assert client.post('/auth/login',json={'phone':'9888888888','pin':'000000','device_id':'review-test-device-id'}).status_code==401
 
-@pytest.mark.parametrize('address',['House 1, Talegaon Dabhade, 410507','House 2, Ravet, 412101','House 3, PCMC','House 4, Pimpri-Chinchwad','House 5, Nigdi','House 6, Wakad'])
+@pytest.mark.parametrize('address',['House 1, Talegaon Dabhade, 410507','House 2, Ravet, 412101','House 3, PCMC, 411033','House 4, Pimpri-Chinchwad, 411017','House 5, Nigdi, 411044','House 6, Wakad, 411057','House 7, Kothrud, Pune, 411038','House 8, Hadapsar, Pune, 411028','House 9, Pune, 411001'])
 def test_real_localities_stock(review,address):
     client,factory=review;headers,login=auth(client,'9777777777')
     assert not login['customer']['is_reviewer']
@@ -69,7 +69,7 @@ def test_real_localities_stock(review,address):
         assert db.query(OrderModel).count()==1 and db.query(ReviewerOrderModel).count()==0
         assert db.query(ProductModel).one().stock_quantity==8
 
-@pytest.mark.parametrize('address',['Mumbai','Pune','NotRavet','TalegaonFake'])
+@pytest.mark.parametrize('address',['Mumbai 400001','Satara 415001','Solapur 413001','Nashik 422001','NotRavet 411038','TalegaonFake 410507'])
 def test_other_areas_rejected(review,address):
     client,factory=review;headers,_=auth(client,'9777777777')
     assert client.post('/customers/me/orders',headers=headers,json=payload(address)).status_code==400
