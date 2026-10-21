@@ -69,7 +69,7 @@ def test_real_localities_stock(review,address):
         assert db.query(OrderModel).count()==1 and db.query(ReviewerOrderModel).count()==0
         assert db.query(ProductModel).one().stock_quantity==8
 
-@pytest.mark.parametrize('address',['Mumbai 400001','Satara 415001','Solapur 413001','Nashik 422001','NotRavet 411038','TalegaonFake 410507'])
+@pytest.mark.parametrize('address',['Mumbai 400001','Satara 415001','Solapur 413001','Nashik 422001','Address without a PIN'])
 def test_other_areas_rejected(review,address):
     client,factory=review;headers,_=auth(client,'9777777777')
     assert client.post('/customers/me/orders',headers=headers,json=payload(address)).status_code==400
