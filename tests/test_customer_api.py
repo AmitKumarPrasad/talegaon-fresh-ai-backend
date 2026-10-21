@@ -256,6 +256,25 @@ def test_customer_promo_quote_and_order_use_catalog_prices_and_delivery_fee():
     assert order.json()["total"] == 92
 
 
+def test_shop200_promo_requires_200_and_returns_flat_discount():
+    headers = {"Authorization": "Bearer " + auth()}
+    below = client.post("/customers/me/promos/validate", headers=headers, json={
+        "promo_code": "SHOP200",
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 4}],
+    })
+    assert below.status_code == 400
+    assert "₹200" in below.json()["detail"]
+
+    eligible = client.post("/customers/me/promos/validate", headers=headers, json={
+        "promo_code": " shop200 ",
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 5}],
+    })
+    assert eligible.status_code == 200
+    assert eligible.json()["promo_code"] == "SHOP200"
+    assert eligible.json()["subtotal"] == 200
+    assert eligible.json()["discount_amount"] == 20
+
+
 def test_customer_promo_rules_keep_configured_caps_and_minimums():
     headers = {"Authorization": "Bearer " + auth()}
     welcome = client.post("/customers/me/promos/validate", headers=headers, json={
