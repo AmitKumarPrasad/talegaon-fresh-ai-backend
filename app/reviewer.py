@@ -25,11 +25,8 @@ def require_service_area(address: str, phone: str) -> None:
     if is_reviewer(phone):
         return
     pins = re.findall(r"(?<!\d)[1-9]\d{5}(?!\d)", address)
-    configured = {value.strip() for value in os.getenv("SERVICEABLE_PINCODES", "").split(",") if value.strip()}
-    if pins and (not pins[-1].startswith("41") or (configured and pins[-1] not in configured)):
-        raise HTTPException(400, "Delivery is not available for this PIN code.")
-    if not re.search(r"\b(?:talegaon(?:\s+dabhade)?|pcmc|pimpri(?:[ -]+chinchwad)?|chinchwad|ravet|akurdi|nigdi|bhosari|wakad|pimple[ -]+(?:saudagar|gurav|nilakh)|moshi|punawale|tathawade|dapodi|(?:new[ -]+)?sangvi|kiwale|mamurdi|charholi|dudulgaon|talawade|chikhali|borhadewadi|kasarwadi|dighi|phugewadi)\b", address, re.I):
-        raise HTTPException(400, "Delivery is available only in Talegaon and PCMC. Include your PCMC or Talegaon locality in the delivery address.")
+    if not pins or not pins[-1].startswith(("410", "411", "412")):
+        raise HTTPException(400, "Delivery is currently available across Pune. Enter a valid Pune PIN code.")
 
 
 def list_orders(phone: str) -> list[dict]:

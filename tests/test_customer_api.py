@@ -829,3 +829,45 @@ def test_welcome50_cannot_be_stacked_by_combining_codes():
     })
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid promo code."
+
+def test_customer_can_cancel_unpacked_order_and_stock_is_released():
+    from app.db import SessionLocal
+
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    order = client.post("/customers/me/orders", headers=headers, json={
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 2}],
+        "address": "Kothrud, Pune, 411038",
+        "payment_method": "COD",
+    })
+    assert order.status_code == 200
+    order_id = order.json()["order_id"]
+
+    other_headers = {"Authorization": f"Bearer {auth()}"}
+    assert client.post(
+        f"/customers/me/orders/{order_id}/cancel", headers=other_headers
+    ).status_code == 404
+
+    cancelled = client.post(
+        f"/customers/me/orders/{order_id}/cancel", headers=headers
+    )
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "CANCELLED"
+    assert client.post(
+        f"/customers/me/orders/{order_id}/cancel", headers=headers
+    ).status_code == 409
+
+    with SessionLocal() as db:
+        product = db.query(ProductModel).filter_by(name="Tomato").one()
+        assert product.stock_quantity == 10
+        history = (
+            db.query(OrderStatusHistoryModel)
+            .filter_by(order_id=order_id)
+            .order_by(OrderStatusHistoryModel.id)
+            .all()
+        )
+        assert [(row.from_status, row.to_status) for row in history] == [
+            ("PENDING", "CONFIRMED"),
+            ("CONFIRMED", "CANCELLED"),
+        ]
+
