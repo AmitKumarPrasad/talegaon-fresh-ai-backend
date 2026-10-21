@@ -25,7 +25,7 @@ def require_service_area(address: str, phone: str) -> None:
     if is_reviewer(phone):
         return
     pins = re.findall(r"(?<!\d)[1-9]\d{5}(?!\d)", address)
-    if not pins or not pins[-1].startswith("41"):
+    if not pins or not pins[-1].startswith(("410", "411", "412")):
         raise HTTPException(400, "Delivery is currently available across Pune. Enter a valid Pune PIN code.")
 
 
