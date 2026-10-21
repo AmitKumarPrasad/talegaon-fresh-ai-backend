@@ -417,9 +417,17 @@ def partner_update_status(
         current = (order.delivery_status or "ASSIGNED").upper()
         if requested not in DELIVERY_TRANSITIONS.get(current, set()):
             raise HTTPException(status_code=409, detail=f"Invalid delivery transition from {current} to {requested}")
+        if requested == "PICKED_UP" and order.status != "PACKING":
+            raise HTTPException(
+                status_code=409,
+                detail="Store is still packing this order. Ask the store to mark it as PACKING before pickup.",
+            )
         if requested == "OUT_FOR_DELIVERY":
             if order.status != "PACKING":
-                raise HTTPException(status_code=409, detail="Order must be PACKING before pickup")
+                raise HTTPException(
+                    status_code=409,
+                    detail="The store has not marked this order as PACKING. Refresh and contact the store before starting delivery.",
+                )
             if not _transition_delivery_order(db, order, "OUT_FOR_DELIVERY"):
                 raise HTTPException(status_code=409, detail="Order status cannot move to OUT_FOR_DELIVERY")
         if requested == "DELIVERED":
