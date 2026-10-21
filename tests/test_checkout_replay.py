@@ -38,8 +38,10 @@ class CheckoutReplayTests(unittest.TestCase):
         with self.assertRaises(HTTPException):
             reviewer.require_service_area('Talegaon 999999', '9876543210')
 
-    def test_configured_coverage(self):
-        with patch.dict('os.environ', {'SERVICEABLE_PINCODES': '410507'}):
-            reviewer.require_service_area('Talegaon 410507', '9876543210')
-            with self.assertRaises(HTTPException):
-                reviewer.require_service_area('PCMC 411033', '9876543210')
+    def test_pune_wide_coverage(self):
+        for address in ('Kothrud 411038', 'Hadapsar 411028', 'Hinjawadi 411057', 'Talegaon 410507'):
+            reviewer.require_service_area(address, '9876543210')
+        with self.assertRaises(HTTPException):
+            reviewer.require_service_area('Mumbai 400001', '9876543210')
+        with self.assertRaises(HTTPException):
+            reviewer.require_service_area('Pune city without a PIN', '9876543210')
