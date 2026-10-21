@@ -836,6 +836,76 @@ def create_customer_payment_link(
     }
 
 
+@router.post("/customers/me/orders/{order_id}/cancel")
+def cancel_customer_order(
+    order_id: int,
+    customer: CustomerModel = Depends(current_customer),
+):
+    if reviewer.is_reviewer(customer.phone):
+        raise HTTPException(status_code=409, detail="Demo orders cannot be cancelled.")
+    db = SessionLocal()
+    try:
+        order = (
+            db.query(OrderModel)
+            .filter(
+                OrderModel.id == order_id,
+                OrderModel.customer_id == customer.phone,
+            )
+            .with_for_update()
+            .first()
+        )
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if order.payment_verified_at or order.razorpay_payment_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Payment was received. Please contact support to cancel and arrange a refund.",
+            )
+        if "CANCELLED" not in get_allowed_transitions(order.status):
+            raise HTTPException(
+                status_code=409,
+                detail="This order can no longer be cancelled from the app. Please contact support.",
+            )
+        if order.stock_reserved:
+            items = db.query(OrderItemModel).filter(OrderItemModel.order_id == order.id).all()
+            for item in items:
+                updated = (
+                    db.query(ProductModel)
+                    .filter(ProductModel.name == item.product_name)
+                    .update(
+                        {ProductModel.stock_quantity: ProductModel.stock_quantity + int(item.quantity)},
+                        synchronize_session=False,
+                    )
+                )
+                if updated != 1:
+                    db.rollback()
+                    raise HTTPException(status_code=409, detail="Could not release reserved stock. Please contact support.")
+                product = db.query(ProductModel).filter(ProductModel.name == item.product_name).first()
+                if product:
+                    product.in_stock = product.stock_quantity > 0
+            order.stock_reserved = False
+        previous_status = order.status
+        order.status = "CANCELLED"
+        db.add(OrderStatusHistoryModel(
+            order_id=order.id,
+            from_status=previous_status,
+            to_status="CANCELLED",
+        ))
+        db.commit()
+        response = _order_dict(db, order)
+        stored_customer = db.get(CustomerModel, customer.phone)
+        fcm_token = stored_customer.fcm_token if stored_customer else None
+        if fcm_token:
+            try:
+                NotificationService.notify_customer_order_status(fcm_token, order_id, "CANCELLED")
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("Order cancellation push failed order_id=%s", order_id)
+        return response
+    finally:
+        db.close()
+
+
 @router.get("/customers/me/orders/{order_id}")
 def get_customer_order_details(order_id: int, customer: CustomerModel = Depends(current_customer)):
     if reviewer.is_reviewer(customer.phone):
