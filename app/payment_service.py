@@ -77,3 +77,22 @@ def extract_paid_event(payload: dict[str, Any]) -> dict[str, Any] | None:
         "amount": int(amount),
         "status": payment.get("status"),
     }
+
+
+def cancel_payment_link(payment_link_id: str) -> dict[str, Any]:
+    """Cancel an unpaid Razorpay payment link before its order is cancelled."""
+    key_id, key_secret = _credentials()
+    try:
+        response = requests.post(
+            f"{RAZORPAY_API_BASE}/payment_links/{payment_link_id}/cancel",
+            auth=(key_id, key_secret),
+            json={},
+            timeout=15,
+        )
+    except requests.RequestException as exc:
+        raise PaymentError("Razorpay payment link cancellation failed") from exc
+    if not response.ok:
+        raise PaymentError(
+            f"Razorpay payment link cancellation failed: HTTP {response.status_code}"
+        )
+    return response.json()
