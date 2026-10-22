@@ -36,3 +36,21 @@ def test_partner_logout_clears_push_token():
     assert result == {"revoked_sessions": 0}
     assert partner.fcm_token is None
     db.commit.assert_called_once()
+
+def test_customer_refresh_logout_clears_push_token():
+    customer = SimpleNamespace(phone="9000000002", fcm_token="refresh-device-token")
+    session = SimpleNamespace(customer_id=customer.phone, revoked_at=None)
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = session
+    db.get.return_value = customer
+
+    with (
+        patch.object(auth, "SessionLocal", return_value=db),
+        patch("app.pin_auth._refresh_hash", return_value="hashed-refresh-token"),
+    ):
+        from app.pin_auth import revoke
+        revoke("refresh-token")
+
+    assert session.revoked_at is not None
+    assert customer.fcm_token is None
+    db.commit.assert_called_once()
