@@ -19,9 +19,12 @@ from app.models import (
     DeliveryPartnerSessionModel,
     DeliveryPayoutLedgerModel,
     OrderItemModel,
+    OrderMessageModel,
     OrderModel,
+    ProductModel,
 )
 from app.order_status import ALLOWED_TRANSITIONS
+from app.payment_service import PaymentError, cancel_payment_link
 from app.phone_utils import is_valid_indian_mobile
 from app.pin_auth import _pin_hash, _pin_matches
 from app.openai_service import generate_partner_reply
@@ -338,6 +341,18 @@ def partner_order(order_id: int, partner: DeliveryPartnerModel = Depends(current
         db.close()
 
 
+class PartnerCancelOrderRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def _trim_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError("Provide a cancellation reason")
+        return value
+
+
 class PartnerLocationRequest(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lng: float = Field(ge=-180, le=180)
@@ -452,6 +467,89 @@ def partner_update_status(
 class DeliveryCompletionRequest(BaseModel):
     otp: str = Field(min_length=6, max_length=6)
     cod_collected: bool = False
+
+
+@router.post("/orders/{order_id}/cancel")
+def partner_cancel_order(
+    order_id: int,
+    payload: PartnerCancelOrderRequest,
+    partner: DeliveryPartnerModel = Depends(current_partner),
+):
+    """Cancel an assigned order before pickup, with payment and inventory safeguards."""
+    db = SessionLocal()
+    try:
+        order = (
+            db.query(OrderModel)
+            .filter(OrderModel.id == order_id)
+            .with_for_update()
+            .first()
+        )
+        if not order or order.delivery_person_phone != partner.phone:
+            raise HTTPException(status_code=404, detail="Assigned order not found")
+        if order.status == "CANCELLED":
+            raise HTTPException(status_code=409, detail="Order is already cancelled")
+        if order.delivery_status not in {"ASSIGNED", "ACCEPTED"}:
+            raise HTTPException(
+                status_code=409,
+                detail="Orders can only be cancelled before pickup. Contact Store Admin for help.",
+            )
+        if order.status not in {"CONFIRMED", "PACKING"}:
+            raise HTTPException(
+                status_code=409,
+                detail="This order cannot be cancelled in its current store status. Contact Store Admin.",
+            )
+        if order.payment_verified_at or order.razorpay_payment_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Payment was received. Contact Store Admin to cancel and arrange a refund.",
+            )
+        if order.razorpay_payment_link_id:
+            try:
+                cancel_payment_link(order.razorpay_payment_link_id)
+            except PaymentError as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail="The payment link could not be cancelled. Please retry or contact Store Admin.",
+                ) from exc
+        if order.stock_reserved:
+            items = db.query(OrderItemModel).filter(OrderItemModel.order_id == order.id).all()
+            for item in items:
+                updated = (
+                    db.query(ProductModel)
+                    .filter(ProductModel.name == item.product_name)
+                    .update(
+                        {ProductModel.stock_quantity: ProductModel.stock_quantity + int(item.quantity)},
+                        synchronize_session=False,
+                    )
+                )
+                if updated != 1:
+                    db.rollback()
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Could not release reserved stock. Contact Store Admin.",
+                    )
+                product = db.query(ProductModel).filter(ProductModel.name == item.product_name).first()
+                if product:
+                    product.in_stock = product.stock_quantity > 0
+            order.stock_reserved = False
+        previous_status = order.status
+        order.status = "CANCELLED"
+        order.delivery_status = "CANCELLED"
+        db.add(OrderStatusHistoryModel(
+            order_id=order.id,
+            from_status=previous_status,
+            to_status="CANCELLED",
+        ))
+        db.add(OrderMessageModel(
+            order_id=order.id,
+            sender="PARTNER",
+            message=f"Cancelled before pickup. Reason: {payload.reason}",
+        ))
+        db.commit()
+        _notify_delivery_transition(db, order)
+        return _order_dict(db, order)
+    finally:
+        db.close()
 
 
 @router.post("/orders/{order_id}/complete")
