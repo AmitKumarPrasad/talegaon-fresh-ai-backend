@@ -32,7 +32,7 @@ from app.models import (
     ProductRequestModel,
     DeliveryPartnerModel,
 )
-from app.order_details import customer_order_dict as _order_dict, get_customer_order, save_payment_link
+from app.order_details import customer_order_dict as _order_dict, get_customer_order
 from app.payment_service import PaymentError, create_payment_link
 from app.order_status import get_allowed_transitions, list_status_history
 from app.delivery_service import add_message_by_customer, get_tracking_info, list_messages_for_customer
@@ -810,30 +810,53 @@ def create_customer_payment_link(
 ):
     if reviewer.is_reviewer(customer.phone):
         raise HTTPException(400, "No real payments are available for reviewer demo orders")
-    order = get_customer_order(order_id, customer.phone)
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-    if order["payment_method"] != "UPI":
-        raise HTTPException(status_code=400, detail="Order payment method must be UPI")
-    if order["status"] != "PAYMENT_PENDING":
-        raise HTTPException(status_code=409, detail="Order is not awaiting UPI payment")
-    if order.get("payment_link_url"):
+
+    db = SessionLocal()
+    try:
+        # Keep the order locked while creating and persisting the external link.
+        # A second request waits here, then sees and reuses the first link rather
+        # than issuing another payable Razorpay link for the same order.
+        order = (
+            db.query(OrderModel)
+            .filter(
+                OrderModel.id == order_id,
+                OrderModel.customer_id == customer.phone,
+            )
+            .with_for_update()
+            .first()
+        )
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if order.payment_method != "UPI":
+            raise HTTPException(status_code=400, detail="Order payment method must be UPI")
+        if order.status != "PAYMENT_PENDING":
+            raise HTTPException(status_code=409, detail="Order is not awaiting UPI payment")
+        if order.payment_link_url:
+            return {
+                "order_id": order_id,
+                "status": order.status,
+                "payment_link_url": order.payment_link_url,
+            }
+
+        try:
+            link = create_payment_link(order_id, order.total, customer.phone)
+            order.razorpay_payment_link_id = link["id"]
+            order.payment_link_url = link["short_url"]
+            db.commit()
+        except PaymentError as exc:
+            db.rollback()
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except Exception:
+            db.rollback()
+            raise
+
         return {
             "order_id": order_id,
-            "status": order["status"],
-            "payment_link_url": order["payment_link_url"],
+            "status": "PAYMENT_PENDING",
+            "payment_link_url": link["short_url"],
         }
-    try:
-        link = create_payment_link(order_id, order["total"], customer.phone)
-        if not save_payment_link(order_id, link["id"], link["short_url"]):
-            raise PaymentError("Order could not be updated with the payment link")
-    except PaymentError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return {
-        "order_id": order_id,
-        "status": "PAYMENT_PENDING",
-        "payment_link_url": link["short_url"],
-    }
+    finally:
+        db.close()
 
 
 @router.post("/customers/me/orders/{order_id}/cancel")
