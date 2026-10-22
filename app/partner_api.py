@@ -258,6 +258,11 @@ def partner_logout(
         revoked_at = datetime.now(timezone.utc)
         for session in sessions:
             session.revoked_at = revoked_at
+        partner = db.get(DeliveryPartnerModel, data["sub"])
+        if partner:
+            # The partner account stores one active push token, so logout
+            # detaches it from this signed-out device.
+            partner.fcm_token = None
         db.commit()
         return {"revoked_sessions": len(sessions)}
     finally:
