@@ -203,6 +203,7 @@ def test_customer_upi_payment_link_is_created_and_reused():
         assert first.status_code == 200
         assert first.json()["payment_link_url"] == "https://rzp.io/i/customer-test"
         assert "razorpay_payment_link_id" not in first.json()
+        from app.db import SessionLocal
         with SessionLocal() as db:
             saved_order = db.get(OrderModel, order_id)
             assert saved_order.razorpay_payment_link_id == "plink_customer_123"
@@ -860,9 +861,6 @@ def test_customer_cancels_pending_razorpay_link_before_order():
 
 
 def test_customer_does_not_cancel_order_when_razorpay_link_cancellation_fails():
-    from app.db import SessionLocal
-    from app.models import OrderModel
-
     token = auth()
     headers = {"Authorization": f"Bearer {token}"}
     order = client.post("/customers/me/orders", headers=headers, json={
@@ -879,9 +877,9 @@ def test_customer_does_not_cancel_order_when_razorpay_link_cancellation_fails():
     with patch("app.customer_api.cancel_payment_link", side_effect=PaymentError("provider unavailable")):
         cancelled = client.post(f"/customers/me/orders/{order_id}/cancel", headers=headers)
     assert cancelled.status_code == 503
-    with SessionLocal() as db:
-        saved = db.get(OrderModel, order_id)
-        assert saved.status == "PAYMENT_PENDING"
+    saved = client.get(f"/customers/me/orders/{order_id}", headers=headers)
+    assert saved.status_code == 200
+    assert saved.json()["status"] == "PAYMENT_PENDING"
 
 
 def test_customer_can_cancel_unpacked_order_and_stock_is_released():
