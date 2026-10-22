@@ -202,6 +202,10 @@ def test_customer_upi_payment_link_is_created_and_reused():
         assert first.status_code == 200
         assert first.json()["payment_link_url"] == "https://rzp.io/i/customer-test"
         assert "razorpay_payment_link_id" not in first.json()
+        with SessionLocal() as db:
+            saved_order = db.get(OrderModel, order_id)
+            assert saved_order.razorpay_payment_link_id == "plink_customer_123"
+            assert saved_order.payment_link_url == "https://rzp.io/i/customer-test"
         create_link.assert_called_once_with(order_id, 60.0, "9999999999")
 
         second = client.post(f"/customers/me/orders/{order_id}/payment-link", headers=headers)
