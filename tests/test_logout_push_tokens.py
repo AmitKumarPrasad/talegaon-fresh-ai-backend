@@ -45,7 +45,7 @@ def test_customer_refresh_logout_clears_push_token():
     db.get.return_value = customer
 
     with (
-        patch.object(auth, "SessionLocal", return_value=db),
+        patch("app.pin_auth.SessionLocal", return_value=db),
         patch("app.pin_auth._refresh_hash", return_value="hashed-refresh-token"),
     ):
         from app.pin_auth import revoke
