@@ -33,7 +33,7 @@ from app.models import (
     DeliveryPartnerModel,
 )
 from app.order_details import customer_order_dict as _order_dict, get_customer_order
-from app.payment_service import PaymentError, create_payment_link
+from app.payment_service import PaymentError, cancel_payment_link, create_payment_link
 from app.order_status import get_allowed_transitions, list_status_history
 from app.delivery_service import add_message_by_customer, get_tracking_info, list_messages_for_customer
 from app.seller_notification import notify_seller
@@ -889,6 +889,14 @@ def cancel_customer_order(
                 status_code=409,
                 detail="This order can no longer be cancelled from the app. Please contact support.",
             )
+        if order.razorpay_payment_link_id:
+            try:
+                cancel_payment_link(order.razorpay_payment_link_id)
+            except PaymentError as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail="The payment link could not be cancelled. Please retry or contact support.",
+                ) from exc
         if order.stock_reserved:
             items = db.query(OrderItemModel).filter(OrderItemModel.order_id == order.id).all()
             for item in items:
