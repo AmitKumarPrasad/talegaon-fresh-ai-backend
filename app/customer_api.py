@@ -811,6 +811,20 @@ def create_customer_payment_link(
     if reviewer.is_reviewer(customer.phone):
         raise HTTPException(400, "No real payments are available for reviewer demo orders")
 
+    snapshot = get_customer_order(order_id, customer.phone)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if snapshot["payment_method"] != "UPI":
+        raise HTTPException(status_code=400, detail="Order payment method must be UPI")
+    if snapshot["status"] != "PAYMENT_PENDING":
+        raise HTTPException(status_code=409, detail="Order is not awaiting UPI payment")
+    if snapshot.get("payment_link_url"):
+        return {
+            "order_id": order_id,
+            "status": snapshot["status"],
+            "payment_link_url": snapshot["payment_link_url"],
+        }
+
     db = SessionLocal()
     try:
         # Keep the order locked while creating and persisting the external link.
