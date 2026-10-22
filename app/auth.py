@@ -241,6 +241,9 @@ def logout_customer(customer: CustomerModel) -> None:
         from app.pin_auth import CustomerSessionModel
 
         row.auth_version += 1
+        # This model stores one active push token per account. Clear it on
+        # logout so order updates cannot reach a signed-out device.
+        row.fcm_token = None
         db.query(CustomerSessionModel).filter(
             CustomerSessionModel.customer_id == row.phone,
             CustomerSessionModel.revoked_at.is_(None),

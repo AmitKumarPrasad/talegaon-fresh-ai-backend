@@ -126,7 +126,14 @@ def revoke(refresh_token: str) -> None:
     db=SessionLocal()
     try:
         row=db.query(CustomerSessionModel).filter(CustomerSessionModel.refresh_token_hash==_refresh_hash(refresh_token), CustomerSessionModel.revoked_at.is_(None)).first()
-        if row: row.revoked_at=datetime.now(timezone.utc); db.commit()
+        if row:
+            row.revoked_at = datetime.now(timezone.utc)
+            customer = db.get(CustomerModel, row.customer_id)
+            if customer:
+                # The account has one stored push token, which must not remain
+                # attached after a device session is explicitly signed out.
+                customer.fcm_token = None
+            db.commit()
     finally: db.close()
 
 
