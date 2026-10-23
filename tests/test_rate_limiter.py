@@ -26,6 +26,9 @@ class RateLimiterTests(unittest.IsolatedAsyncioTestCase):
     def test_rules_cover_sensitive_endpoints(self):
         self.assertEqual(rule_for("/auth/login"), (10, 60))
         self.assertEqual(rule_for("/auth/register"), (5, 600))
+        self.assertEqual(rule_for("/auth/google/login"), (10, 60))
+        self.assertEqual(rule_for("/auth/google/otp"), (3, 600))
+        self.assertEqual(rule_for("/auth/google/register"), (5, 600))
         self.assertEqual(rule_for("/auth/refresh"), (30, 60))
         self.assertEqual(rule_for("/customers/me/ai/chat"), (20, 60))
         self.assertEqual(rule_for("/admin/orders"), (60, 60))
