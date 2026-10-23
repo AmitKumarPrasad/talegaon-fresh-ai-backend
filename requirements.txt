@@ -9,6 +9,7 @@ SQLAlchemy
 psycopg2-binary
 alembic
 firebase-admin
+google-auth>=2.0,<3
 
 redis>=6.4,<7
 mcp==1.30.0
