@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal
 from app.main import app
-from app.models import CustomerGoogleIdentityModel, CustomerModel, OrderModel, OrderStatusHistoryModel, ProductModel
+from app.models import OrderModel, OrderStatusHistoryModel, ProductModel
 from app.payment_service import PaymentError
 
 client = TestClient(app)
@@ -120,9 +120,12 @@ def test_google_link_preserves_existing_phone_account_and_pin(monkeypatch):
         "pin": "123456",
         "device_id": "google-link-test-device",
     }).status_code == 200
-    with SessionLocal() as db:
-        identity = db.query(CustomerGoogleIdentityModel).filter_by(customer_id=phone).one()
-        assert identity.provider_subject == "google-subject-link"
+    google_login = client.post("/auth/google/login", json={
+        "id_token": "verified-google-id-token-value",
+        "device_id": "google-link-test-device",
+    })
+    assert google_login.status_code == 200
+    assert google_login.json()["customer"]["phone"] == phone
 
 
 def test_auth_and_addresses():
