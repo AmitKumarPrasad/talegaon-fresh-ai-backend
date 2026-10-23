@@ -19,7 +19,7 @@ def verify_google_id_token(token: str) -> dict[str, str]:
 
     try:
         claims = id_token.verify_oauth2_token(token, Request(), client_id)
-    except (ValueError, Exception) as exc:
+    except Exception as exc:
         # Never include the token or provider response in the API error.
         raise HTTPException(
             status_code=401,
