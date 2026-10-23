@@ -7,7 +7,7 @@ from fastapi import Request
 from app.rate_limiter import client_ip, enforce_rate_limit, rule_for
 
 
-def request_for(path: str, headers: list[tuple[bytes, bytes]] | None = None) -> Request:
+def request_for(path: str, headers: list[tuple[bytes, bytes]] | None = None, body: bytes = b"") -> Request:
     scope = {
         "type": "http",
         "method": "POST",
@@ -18,7 +18,7 @@ def request_for(path: str, headers: list[tuple[bytes, bytes]] | None = None) -> 
         "server": ("test", 443),
     }
     async def receive():
-        return {"type": "http.request", "body": b"", "more_body": False}
+        return {"type": "http.request", "body": body, "more_body": False}
     return Request(scope, receive)
 
 
@@ -40,6 +40,20 @@ class RateLimiterTests(unittest.IsolatedAsyncioTestCase):
             [(b"cf-connecting-ip", b"203.0.113.9"), (b"x-forwarded-for", b"198.51.100.4")],
         )
         self.assertEqual(client_ip(request), "203.0.113.9")
+
+
+    async def test_google_otp_limit_is_applied_per_phone(self):
+        fake_redis = type("FakeRedis", (), {})()
+        fake_redis.eval = AsyncMock(side_effect=[[1, 2, 600], [0, 0, 600]])
+        request = request_for(
+            "/auth/google/otp",
+            body=b'{"phone":"9876543210"}',
+        )
+        with patch.dict(os.environ, {"ENVIRONMENT": "production", "REDIS_URL": "redis://test"}):
+            with patch("app.rate_limiter._client", return_value=fake_redis):
+                response = await enforce_rate_limit(request)
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(fake_redis.eval.await_count, 2)
 
     async def test_blocked_request_returns_429(self):
         fake_redis = type("FakeRedis", (), {})()
