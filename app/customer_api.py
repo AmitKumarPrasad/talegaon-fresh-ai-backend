@@ -553,8 +553,6 @@ def auth_google_register(payload: GoogleRegistrationRequest):
                 )
                 db.add(customer)
                 db.flush()
-            elif payload.name and payload.name.strip():
-                customer.name = payload.name.strip()[:100]
 
             credential = db.get(PinCredentialModel, payload.phone)
             if not credential:
