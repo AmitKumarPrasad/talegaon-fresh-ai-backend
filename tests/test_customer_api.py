@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.db import Base, SessionLocal
 from app.main import app
-from app.models import OrderModel, OrderStatusHistoryModel, ProductModel
+from app.models import CustomerGoogleIdentityModel, CustomerModel, OrderModel, OrderStatusHistoryModel, ProductModel
 from app.payment_service import PaymentError
 
 client = TestClient(app)
@@ -45,6 +45,84 @@ def isolated_customer_database(monkeypatch):
         db.commit()
     yield
     engine.dispose()
+
+
+def test_google_login_requires_phone_verification_for_first_link(monkeypatch):
+    monkeypatch.setattr("app.customer_api.verify_google_id_token", lambda _token: {
+        "subject": "google-subject-new",
+        "email": "fresh.customer@example.com",
+        "name": "Fresh Customer",
+    })
+    response = client.post("/auth/google/login", json={
+        "id_token": "verified-google-id-token-value",
+        "device_id": "google-login-test-device-001",
+    })
+    assert response.status_code == 200
+    assert response.json()["needs_phone_verification"] is True
+    assert response.json()["email"] == "fresh.customer@example.com"
+    assert "access_token" not in response.json()
+
+
+def test_google_registration_verifies_phone_and_creates_pin_customer(monkeypatch):
+    monkeypatch.setattr("app.customer_api.verify_google_id_token", lambda _token: {
+        "subject": "google-subject-new",
+        "email": "fresh.customer@example.com",
+        "name": "Fresh Customer",
+    })
+    monkeypatch.setattr("app.customer_api.verify_msg91_otp", lambda phone, otp: phone == "9876543210" and otp == "123456")
+
+    response = client.post("/auth/google/register", json={
+        "id_token": "verified-google-id-token-value",
+        "phone": "9876543210",
+        "otp": "123456",
+        "name": "Fresh Customer",
+        "pin": "654321",
+        "device_id": "google-register-test-device",
+    })
+
+    assert response.status_code == 200
+    assert response.json()["customer"]["phone"] == "9876543210"
+    assert client.get(
+        "/customers/me",
+        headers={"Authorization": f"Bearer {response.json()['access_token']}"},
+    ).status_code == 200
+    pin_login = client.post("/auth/login", json={
+        "phone": "9876543210",
+        "pin": "654321",
+        "device_id": "google-register-test-device",
+    })
+    assert pin_login.status_code == 200
+
+
+def test_google_link_preserves_existing_phone_account_and_pin(monkeypatch):
+    access_token = auth()
+    existing = client.get("/customers/me", headers={"Authorization": f"Bearer {access_token}"}).json()
+    original_name = existing["name"]
+    phone = existing["phone"]
+    monkeypatch.setattr("app.customer_api.verify_google_id_token", lambda _token: {
+        "subject": "google-subject-link",
+        "email": "linked.customer@example.com",
+        "name": "Different Google Name",
+    })
+    monkeypatch.setattr("app.customer_api.verify_msg91_otp", lambda _phone, otp: otp == "123456")
+
+    linked = client.post("/auth/google/register", json={
+        "id_token": "verified-google-id-token-value",
+        "phone": phone,
+        "otp": "123456",
+        "name": "Different Google Name",
+        "device_id": "google-link-test-device",
+    })
+    assert linked.status_code == 200
+    assert linked.json()["customer"]["name"] == original_name
+    assert client.post("/auth/login", json={
+        "phone": phone,
+        "pin": "123456",
+        "device_id": "google-link-test-device",
+    }).status_code == 200
+    with SessionLocal() as db:
+        identity = db.query(CustomerGoogleIdentityModel).filter_by(customer_id=phone).one()
+        assert identity.provider_subject == "google-subject-link"
 
 
 def test_auth_and_addresses():
