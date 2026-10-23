@@ -137,7 +137,7 @@ async def enforce_rate_limit(request: Request) -> JSONResponse | None:
     try:
         result = await _client().eval(_RATE_SCRIPT, 1, key, limit, window)
         # Account-level ceiling also protects PIN login across different IPs.
-        if int(result[0]) and request.url.path in {"/auth/login", "/partner/auth/login"}:
+        if int(result[0]) and request.url.path in {"/auth/login", "/partner/auth/login", "/auth/google/otp", "/auth/google/register"}:
             try:
                 payload = await request.json()
                 phone = str(payload.get("phone", "")).strip()
@@ -146,7 +146,11 @@ async def enforce_rate_limit(request: Request) -> JSONResponse | None:
             if phone:
                 account = hashlib.sha256(phone.encode()).hexdigest()
                 account_key = f"tf:rl:account:{request.url.path}:{account}"
-                result = await _client().eval(_RATE_SCRIPT, 1, account_key, 5, 900)
+                account_limit, account_window = {
+                    "/auth/google/otp": (3, 600),
+                    "/auth/google/register": (5, 600),
+                }.get(request.url.path, (5, 900))
+                result = await _client().eval(_RATE_SCRIPT, 1, account_key, account_limit, account_window)
     except Exception:
         if _environment() == "production":
             return JSONResponse(
