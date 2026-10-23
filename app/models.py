@@ -142,6 +142,16 @@ class CustomerModel(Base):
     fcm_token: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
+class CustomerGoogleIdentityModel(Base):
+    __tablename__ = "customer_google_identities"
+    provider_subject: Mapped[str] = mapped_column(String(255), primary_key=True)
+    customer_id: Mapped[str] = mapped_column(
+        ForeignKey("customers.phone", ondelete="CASCADE"), unique=True, index=True, nullable=False
+    )
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
 class AddressModel(Base):
     __tablename__ = "addresses"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
