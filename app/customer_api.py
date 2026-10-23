@@ -17,6 +17,8 @@ from app.pin_auth import (
     login as login_pin,
     refresh as refresh_pin,
     revoke as revoke_refresh,
+    _issue as issue_customer_session,
+    _pin_hash,
 )
 from app.db import SessionLocal
 from app.models import (
@@ -31,6 +33,7 @@ from app.models import (
     ProductModel,
     ProductRequestModel,
     DeliveryPartnerModel,
+    CustomerGoogleIdentityModel,
 )
 from app.order_details import customer_order_dict as _order_dict, get_customer_order
 from app.payment_service import PaymentError, cancel_payment_link, create_payment_link
@@ -40,6 +43,8 @@ from app.seller_notification import notify_seller
 from app.notification_service import NotificationService
 from app.state import get_state
 from app.phone_utils import is_valid_indian_mobile
+from app.google_auth import verify_google_id_token
+from app.msg91_service import send_otp as send_msg91_otp, verify_otp as verify_msg91_otp
 
 from app import reviewer
 
@@ -72,6 +77,46 @@ class PinAuthRequest(BaseModel):
         value = value.strip()
         if not is_valid_indian_mobile(value):
             raise ValueError("Enter a valid 10-digit Indian mobile number")
+        return value
+
+
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str = Field(min_length=20, max_length=8192)
+    device_id: str = Field(min_length=16, max_length=200)
+
+
+class GoogleOtpRequest(BaseModel):
+    id_token: str = Field(min_length=20, max_length=8192)
+    phone: str = Field(min_length=10, max_length=10)
+
+    @field_validator("phone")
+    @classmethod
+    def _validate_google_phone(cls, value: str) -> str:
+        value = value.strip()
+        if not is_valid_indian_mobile(value):
+            raise ValueError("Enter a valid 10-digit Indian mobile number")
+        return value
+
+
+class GoogleRegistrationRequest(GoogleOtpRequest):
+    otp: str = Field(min_length=4, max_length=8)
+    name: str | None = Field(default=None, max_length=100)
+    pin: str | None = Field(default=None, min_length=6, max_length=6)
+    device_id: str = Field(min_length=16, max_length=200)
+
+    @field_validator("otp")
+    @classmethod
+    def _validate_google_otp(cls, value: str) -> str:
+        if not value.isdigit():
+            raise ValueError("Enter the numeric OTP")
+        return value
+
+    @field_validator("pin")
+    @classmethod
+    def _validate_google_pin(cls, value: str | None) -> str | None:
+        if value is not None and not value.isdigit():
+            raise ValueError("PIN must contain exactly 6 digits")
         return value
 
 
@@ -432,6 +477,109 @@ def auth_login(payload: PinAuthRequest):
     return login_pin(payload.phone, payload.pin, payload.device_id)
 
 
+
+@router.post("/auth/google/login")
+def auth_google_login(payload: GoogleLoginRequest):
+    """Sign in an already-linked Google identity or request first-time phone verification."""
+    claims = verify_google_id_token(payload.id_token)
+    db = SessionLocal()
+    try:
+        identity = db.get(CustomerGoogleIdentityModel, claims["subject"])
+        if not identity:
+            return {
+                "needs_phone_verification": True,
+                "email": claims["email"],
+                "name": claims["name"],
+            }
+        customer = db.get(CustomerModel, identity.customer_id)
+        if not customer:
+            raise HTTPException(status_code=401, detail="Customer account is unavailable.")
+        result = issue_customer_session(db, customer, payload.device_id)
+        db.commit()
+        return result
+    finally:
+        db.close()
+
+
+@router.post("/auth/google/otp")
+def auth_google_otp(payload: GoogleOtpRequest):
+    """Send MSG91 OTP only after verifying the Google identity assertion."""
+    verify_google_id_token(payload.id_token)
+    try:
+        send_msg91_otp(payload.phone)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Phone verification is temporarily unavailable.") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Could not send verification code. Please retry.") from exc
+    return {"status": "sent"}
+
+
+@router.post("/auth/google/register")
+def auth_google_register(payload: GoogleRegistrationRequest):
+    """Verify phone ownership, then create or link a customer Google identity."""
+    claims = verify_google_id_token(payload.id_token)
+    try:
+        otp_valid = verify_msg91_otp(payload.phone, payload.otp)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Phone verification is temporarily unavailable.") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Could not verify the code. Please retry.") from exc
+    if not otp_valid:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification code.")
+
+    db = SessionLocal()
+    try:
+        identity = db.get(CustomerGoogleIdentityModel, claims["subject"])
+        if identity:
+            if identity.customer_id != payload.phone:
+                raise HTTPException(status_code=409, detail="This Google account is already linked to another customer.")
+            customer = db.get(CustomerModel, identity.customer_id)
+            if not customer:
+                raise HTTPException(status_code=401, detail="Customer account is unavailable.")
+        else:
+            identity_for_customer = (
+                db.query(CustomerGoogleIdentityModel)
+                .filter(CustomerGoogleIdentityModel.customer_id == payload.phone)
+                .first()
+            )
+            if identity_for_customer:
+                raise HTTPException(status_code=409, detail="This customer already has a different Google account linked.")
+
+            customer = db.get(CustomerModel, payload.phone)
+            if not customer:
+                customer = CustomerModel(
+                    phone=payload.phone,
+                    name=(payload.name or claims["name"] or "Customer").strip()[:100],
+                )
+                db.add(customer)
+                db.flush()
+            elif payload.name and payload.name.strip():
+                customer.name = payload.name.strip()[:100]
+
+            credential = db.get(PinCredentialModel, payload.phone)
+            if not credential:
+                if not payload.pin:
+                    raise HTTPException(status_code=422, detail="Create a 6-digit PIN for phone/PIN sign-in.")
+                db.add(PinCredentialModel(
+                    customer_id=payload.phone,
+                    pin_hash=_pin_hash(payload.pin),
+                ))
+            db.add(CustomerGoogleIdentityModel(
+                provider_subject=claims["subject"],
+                customer_id=payload.phone,
+                email=claims["email"],
+            ))
+
+        result = issue_customer_session(db, customer, payload.device_id)
+        db.commit()
+        return result
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Google account link already exists. Please sign in again.") from exc
+    finally:
+        db.close()
+
+
 @router.post("/auth/refresh")
 def auth_refresh(payload: RefreshRequest):
     return refresh_pin(payload.refresh_token, payload.device_id)
@@ -487,6 +635,7 @@ def delete_customer_account(customer: CustomerModel = Depends(current_customer))
 
         db.query(reviewer.ReviewerOrderModel).filter_by(customer_id=customer.phone).delete(synchronize_session=False)
         db.query(AddressModel).filter(AddressModel.customer_id == customer.phone).delete(synchronize_session=False)
+        db.query(CustomerGoogleIdentityModel).filter(CustomerGoogleIdentityModel.customer_id == customer.phone).delete(synchronize_session=False)
         db.query(CustomerSessionModel).filter(CustomerSessionModel.customer_id == customer.phone).delete(synchronize_session=False)
         db.query(PinCredentialModel).filter(PinCredentialModel.customer_id == customer.phone).delete(synchronize_session=False)
         db.query(ConversationStateModel).filter(ConversationStateModel.customer_id == customer.phone).delete(synchronize_session=False)
