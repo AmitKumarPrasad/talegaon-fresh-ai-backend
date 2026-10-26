@@ -16,6 +16,7 @@ class DeliveryTokenSecurityTests(unittest.TestCase):
                 "delivery_token_expires_at": expires_at,
                 "delivery_person_name": None,
                 "delivery_person_phone": None,
+                "delivery_status": "OUT_FOR_DELIVERY",
                 "status": "OUT_FOR_DELIVERY",
                 "address": "Talegaon",
                 "delivery_lat": None,
@@ -47,6 +48,28 @@ class DeliveryTokenSecurityTests(unittest.TestCase):
         self.assertTrue(len(result["delivery_token"]) >= 32)
         self.assertGreaterEqual(order.delivery_token_expires_at, before + DELIVERY_TOKEN_TTL - timedelta(seconds=1))
         self.assertLessEqual(order.delivery_token_expires_at, after + DELIVERY_TOKEN_TTL + timedelta(seconds=1))
+
+    def test_terminal_status_invalidates_unexpired_token(self):
+        expiry = datetime.now(timezone.utc) + timedelta(hours=1)
+        for status in ("CANCELLED", "DELIVERED"):
+            order = self._order(expiry)
+            order.delivery_token = "still-stored-token"
+            order.status = status
+            self.assertFalse(_token_is_active(order))
+
+    @patch("app.delivery_service.SessionLocal")
+    def test_reassignment_rotates_an_active_delivery_token(self, session_local):
+        db = session_local.return_value
+        order = self._order(datetime.now(timezone.utc) + timedelta(hours=1))
+        order.delivery_token = "old-partner-token"
+        order.delivery_person_phone = "919111111111"
+        db.get.return_value = order
+
+        result = assign_delivery_person(7, "New Driver", "919222222222")
+
+        self.assertNotEqual(result["delivery_token"], "old-partner-token")
+        self.assertEqual(order.delivery_person_phone, "919222222222")
+        self.assertEqual(order.delivery_status, "ASSIGNED")
 
     @patch("app.delivery_service.SessionLocal")
     def test_expired_token_is_rejected(self, session_local):
