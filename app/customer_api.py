@@ -422,6 +422,23 @@ def _address_dict(item: AddressModel) -> dict:
     return {"id": item.id, "label": item.label, "address": item.address, "city": item.city, "pincode": item.pincode, "is_default": item.is_default}
 
 
+LEGACY_CHECKOUT_RETRY_WINDOW = timedelta(minutes=2)
+
+
+def _legacy_checkout_retry_is_recent(response: dict) -> bool:
+    created_at = response.get("created_at")
+    if not created_at:
+        return False
+    try:
+        created_at = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    age = datetime.now(timezone.utc) - created_at.astimezone(timezone.utc)
+    return timedelta(0) <= age <= LEGACY_CHECKOUT_RETRY_WINDOW
+
+
 @router.post("/auth/register")
 def auth_register(payload: PinAuthRequest):
     return register_pin(payload.phone, payload.name or "Customer", payload.pin, payload.device_id)
@@ -679,12 +696,22 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
             CustomerModel.phone == customer.phone
         ).with_for_update().first()
         request_hash = hashlib.sha256(json.dumps(payload.model_dump(exclude={"idempotency_key"}), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-        if payload.idempotency_key:
-            previous = db.get(CheckoutRequestModel, (customer.phone, payload.idempotency_key))
-            if previous:
-                if previous.request_hash != request_hash:
+        checkout_key = payload.idempotency_key
+        legacy_checkout = checkout_key is None
+        if legacy_checkout:
+            # Older installed apps may omit an idempotency key. Reuse their
+            # checkout response for a short retry window without changing the
+            # current client contract.
+            checkout_key = f"legacy-{request_hash}"
+        checkout_request = db.get(CheckoutRequestModel, (customer.phone, checkout_key))
+        if checkout_request:
+            if legacy_checkout:
+                if _legacy_checkout_retry_is_recent(checkout_request.response):
+                    return checkout_request.response
+            else:
+                if checkout_request.request_hash != request_hash:
                     raise HTTPException(409, "Checkout request changed. Start a new checkout.")
-                return previous.response
+                return checkout_request.response
         address = payload.address
         if payload.address_id is not None:
             saved = db.get(AddressModel, payload.address_id)
@@ -699,8 +726,12 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
                 raise HTTPException(400, "Reviewer orders use simulated COD only")
             quote = _quote_order(db, customer.phone, payload.items, payload.promo_code or "")
             response = reviewer.create_order(db, customer, payload, address, quote, commit=False)
-            if payload.idempotency_key:
-                db.add(CheckoutRequestModel(customer_id=customer.phone, request_key=payload.idempotency_key, request_hash=request_hash, response=response))
+            if checkout_key:
+                if checkout_request:
+                    checkout_request.request_hash = request_hash
+                    checkout_request.response = response
+                else:
+                    db.add(CheckoutRequestModel(customer_id=customer.phone, request_key=checkout_key, request_hash=request_hash, response=response))
             db.commit()
             return response
         promo_code = payload.promo_code.strip().upper() if payload.promo_code else None
@@ -764,8 +795,12 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
             ))
         db.flush()
         response = _order_dict(db, order)
-        if payload.idempotency_key:
-            db.add(CheckoutRequestModel(customer_id=customer.phone, request_key=payload.idempotency_key, request_hash=request_hash, response=response))
+        if checkout_key:
+            if checkout_request:
+                checkout_request.request_hash = request_hash
+                checkout_request.response = response
+            else:
+                db.add(CheckoutRequestModel(customer_id=customer.phone, request_key=checkout_key, request_hash=request_hash, response=response))
         db.commit()
         try:
             notify_seller(
