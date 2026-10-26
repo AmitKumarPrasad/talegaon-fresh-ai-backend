@@ -82,5 +82,19 @@ class DeliveryTokenSecurityTests(unittest.TestCase):
         self.assertIsNone(get_order_by_delivery_token("expired-token"))
 
 
+    @patch("app.delivery_service.SessionLocal")
+    def test_terminal_order_token_lookup_is_rejected(self, session_local):
+        db = session_local.return_value
+        query = MagicMock()
+        query.filter.return_value = query
+        order = self._order(datetime.now(timezone.utc) + timedelta(hours=1))
+        order.delivery_token = "terminal-order-token"
+        order.status = "CANCELLED"
+        query.first.return_value = order
+        db.query.return_value = query
+
+        self.assertIsNone(get_order_by_delivery_token("terminal-order-token"))
+
+
 if __name__ == "__main__":
     unittest.main()
