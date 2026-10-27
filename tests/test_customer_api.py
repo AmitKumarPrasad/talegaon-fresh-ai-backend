@@ -138,6 +138,29 @@ def test_cart_and_orders():
 
 
 
+def test_legacy_checkout_retry_without_idempotency_key_reuses_recent_order():
+    from app.db import SessionLocal
+    from app.models import ProductModel
+
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 999, "quantity": 2}],
+        "address": "Main Road, Talegaon, 410507",
+        "payment_method": "COD",
+    }
+
+    first = client.post("/customers/me/orders", headers=headers, json=payload)
+    retry = client.post("/customers/me/orders", headers=headers, json=payload)
+
+    assert first.status_code == 200
+    assert retry.status_code == 200
+    assert retry.json()["order_id"] == first.json()["order_id"]
+    with SessionLocal() as db:
+        assert db.query(OrderModel).count() == 1
+        assert db.query(ProductModel).filter_by(name="Tomato").one().stock_quantity == 8
+
+
 def test_checkout_records_payment_status_transition_history():
     from app.db import SessionLocal
 

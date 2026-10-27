@@ -8,6 +8,13 @@ DELIVERY_TOKEN_TTL = timedelta(hours=24)
 
 
 def _token_is_active(order: OrderModel, now: datetime | None = None) -> bool:
+    # The shared delivery link is a short-lived capability. A terminal order
+    # must revoke it immediately, even if its stored expiry is still in future.
+    terminal_statuses = {"CANCELLED", "DELIVERED"}
+    if str(getattr(order, "status", "")).upper() in terminal_statuses:
+        return False
+    if str(getattr(order, "delivery_status", "")).upper() in terminal_statuses:
+        return False
     expires_at = order.delivery_token_expires_at
     if not expires_at:
         return False
@@ -37,10 +44,13 @@ def assign_delivery_person(order_id: int, name: str, phone: str) -> dict | None:
         order = db.get(OrderModel, order_id)
         if not order:
             return None
+        reassigned = order.delivery_person_phone != phone
         order.delivery_person_name = name
         order.delivery_person_phone = phone
         order.delivery_status = "ASSIGNED"
-        if not order.delivery_token or not _token_is_active(order):
+        if reassigned or not order.delivery_token or not _token_is_active(order):
+            # Never leave a previously issued capability link usable for a
+            # newly assigned partner.
             order.delivery_token = secrets.token_urlsafe(24)
             order.delivery_token_expires_at = datetime.now(timezone.utc) + DELIVERY_TOKEN_TTL
         db.commit()
