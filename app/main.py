@@ -12,6 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.admin_orders import get_admin_order, list_orders
 from app.admin_dashboard import get_dashboard_summary
@@ -132,6 +133,20 @@ async def security_headers(request: Request, call_next):
         if rate_limit_response is not None:
             return _apply_security_headers(request, rate_limit_response)
         response = await call_next(request)
+    except SQLAlchemyError as exc:
+        # SQLAlchemy exception strings may contain SQL parameters (including
+        # token hashes). Keep logs useful without emitting query values.
+        logger.error(
+            "Database operation failed request_id=%s method=%s path=%s error_type=%s",
+            request_id,
+            request.method,
+            request.url.path,
+            type(exc).__name__,
+        )
+        response = JSONResponse(
+            status_code=503,
+            content={"detail": "Service temporarily unavailable", "request_id": request_id},
+        )
     except Exception:
         logger.exception(
             "Unhandled request exception request_id=%s method=%s path=%s",

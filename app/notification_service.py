@@ -21,22 +21,35 @@ class NotificationService:
             return
 
         try:
-            # Initialize Firebase Admin SDK with service account key
+            # Prefer a secret environment variable so Render can store the
+            # replacement credential without committing a key file to Git.
+            service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
             service_account_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY_PATH")
-            if not service_account_path:
-                logger.warning("FIREBASE_SERVICE_ACCOUNT_KEY_PATH not set; FCM notifications disabled")
+
+            if service_account_json:
+                cred = credentials.Certificate(json.loads(service_account_json))
+            elif service_account_path and os.path.exists(service_account_path):
+                cred = credentials.Certificate(service_account_path)
+            elif os.getenv("FIREBASE_USE_APPLICATION_DEFAULT_CREDENTIALS", "").lower() == "true":
+                cred = credentials.ApplicationDefault()
+            else:
+                logger.warning(
+                    "Firebase credentials are not configured; FCM notifications disabled"
+                )
                 return
 
-            if not os.path.exists(service_account_path):
-                logger.warning(f"Service account key file not found: {service_account_path}")
-                return
-
-            cred = credentials.Certificate(service_account_path)
-            firebase_admin.initialize_app(cred)
+            try:
+                firebase_admin.get_app()
+            except ValueError:
+                firebase_admin.initialize_app(cred)
             NotificationService._initialized = True
             logger.info("Firebase Admin SDK initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize Firebase Admin SDK: {str(e)}")
+        except Exception as exc:
+            # Credential exceptions can contain sensitive configuration details.
+            logger.error(
+                "Failed to initialize Firebase Admin SDK (error_type=%s)",
+                type(exc).__name__,
+            )
 
     @staticmethod
     def send_notification_to_customer(
@@ -83,7 +96,7 @@ class NotificationService:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to send customer notification: {str(e)}")
+            logger.error("Failed to send customer notification order_id=%s error_type=%s", order_id, type(e).__name__)
             return False
 
     @staticmethod
@@ -131,7 +144,7 @@ class NotificationService:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to send partner notification: {str(e)}")
+            logger.error("Failed to send partner notification order_id=%s error_type=%s", order_id, type(e).__name__)
             return False
 
     @staticmethod
