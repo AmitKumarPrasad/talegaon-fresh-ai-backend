@@ -133,31 +133,47 @@ async def security_headers(request: Request, call_next):
         if rate_limit_response is not None:
             return _apply_security_headers(request, rate_limit_response)
         response = await call_next(request)
-    except SQLAlchemyError as exc:
-        # SQLAlchemy exception strings may contain SQL parameters (including
-        # token hashes). Keep logs useful without emitting query values.
-        logger.error(
-            "Database operation failed request_id=%s method=%s path=%s error_type=%s",
-            request_id,
-            request.method,
-            request.url.path,
-            type(exc).__name__,
+    except Exception as exc:
+        database_error = isinstance(exc, SQLAlchemyError) or any(
+            isinstance(nested, SQLAlchemyError)
+            for nested in getattr(exc, "exceptions", ())
         )
-        response = JSONResponse(
-            status_code=503,
-            content={"detail": "Service temporarily unavailable", "request_id": request_id},
-        )
-    except Exception:
-        logger.exception(
-            "Unhandled request exception request_id=%s method=%s path=%s",
-            request_id,
-            request.method,
-            request.url.path,
-        )
-        response = JSONResponse(
-            status_code=500,
-            content={"detail": "Internal server error", "request_id": request_id},
-        )
+        if database_error:
+            # SQLAlchemy exception strings may contain SQL parameters (including
+            # token hashes). Keep logs useful without emitting query values.
+            logger.error(
+                "Database operation failed request_id=%s method=%s path=%s error_type=%s",
+                request_id,
+                request.method,
+                request.url.path,
+                type(exc).__name__,
+            )
+            response = JSONResponse(
+                status_code=503,
+                content={"detail": "Service temporarily unavailable", "request_id": request_id},
+            )
+        else:
+            # Avoid logging arbitrary exception strings in production; providers
+            # may include credentials or user data in them.
+            if IS_PRODUCTION:
+                logger.error(
+                    "Unhandled request exception request_id=%s method=%s path=%s error_type=%s",
+                    request_id,
+                    request.method,
+                    request.url.path,
+                    type(exc).__name__,
+                )
+            else:
+                logger.exception(
+                    "Unhandled request exception request_id=%s method=%s path=%s",
+                    request_id,
+                    request.method,
+                    request.url.path,
+                )
+            response = JSONResponse(
+                status_code=500,
+                content={"detail": "Internal server error", "request_id": request_id},
+            )
     return _apply_security_headers(request, response)
 
 
