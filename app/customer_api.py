@@ -32,6 +32,8 @@ from app.models import (
     ProductRequestModel,
     DeliveryPartnerModel,
 )
+from app.campaigns import is_active
+from app.models import PromotionModel
 from app.order_details import customer_order_dict as _order_dict, get_customer_order
 from app.payment_service import PaymentError, cancel_payment_link, create_payment_link
 from app.order_status import get_allowed_transitions, list_status_history
@@ -157,7 +159,18 @@ def _promo_rule(db, customer_id: str, promo_code: str | None) -> tuple[str, dict
         return None
 
     code = promo_code.strip().upper()
-    rule = _PROMO_RULES.get(code)
+    configured = db.query(PromotionModel).filter(PromotionModel.code == code).first()
+    if configured is not None:
+        if not is_active(configured):
+            raise HTTPException(status_code=400, detail="This promo code is not active.")
+        rule = {"min_order": configured.min_order, "first_order_only": configured.first_order_only}
+        if configured.discount_type == "flat":
+            rule["flat_discount"] = configured.discount_value
+        else:
+            rule["percent"] = configured.discount_value / 100
+            rule["max_discount"] = configured.max_discount
+    else:
+        rule = _PROMO_RULES.get(code)
     if rule is not None:
         if rule.get("first_order_only") and db.query(OrderModel.id).filter(
             OrderModel.customer_id == customer_id
