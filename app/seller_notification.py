@@ -6,6 +6,7 @@ import os
 from email.message import EmailMessage
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +41,9 @@ def notify_seller(order_id: int, customer_id: str, total: float, address: str, p
     try:
         token = _post_json(
             "https://oauth2.googleapis.com/token",
-            json.dumps({"client_id": client_id, "client_secret": client_secret,
-                        "refresh_token": refresh_token, "grant_type": "refresh_token"}).encode(),
-            {"Content-Type": "application/json"},
+            urlencode({"client_id": client_id, "client_secret": client_secret,
+                       "refresh_token": refresh_token, "grant_type": "refresh_token"}).encode(),
+            {"Content-Type": "application/x-www-form-urlencoded"},
         )["access_token"]
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
         _post_json(
