@@ -946,3 +946,40 @@ def test_customer_can_cancel_unpacked_order_and_stock_is_released():
             ("CONFIRMED", "CANCELLED"),
         ]
 
+
+
+
+def test_admin_campaign_controls_checkout_and_public_banners(monkeypatch):
+    monkeypatch.setenv("ADMIN_API_TOKEN", "campaign-admin-token")
+    admin = {"X-Admin-Token": "campaign-admin-token"}
+    offer = {"code": "SAVE20", "discount_type": "flat", "discount_value": 20,
+             "min_order": 40, "active": True}
+    assert client.post("/admin/promotions", json=offer).status_code == 401
+    created = client.post("/admin/promotions", headers=admin, json=offer)
+    assert created.status_code == 200
+    promotion_id = created.json()["id"]
+    banner = {"title": "Save ₹20", "description": "On ₹40", "promo_code": "SAVE20", "active": True}
+    assert client.post("/admin/banners", headers=admin, json=banner).status_code == 200
+    assert len(client.get("/campaigns").json()["banners"]) == 1
+    headers = {"Authorization": "Bearer " + auth()}
+    payload = {"items": [{"name": "Tomato", "unit": "1 kg", "price": 999, "quantity": 1}],
+               "promo_code": "SAVE20"}
+    quote = client.post("/customers/me/promos/validate", headers=headers, json=payload)
+    assert quote.status_code == 200
+    assert quote.json()["subtotal"] == 40
+    assert quote.json()["discount_amount"] == 20
+    offer["active"] = False
+    assert client.put(f"/admin/promotions/{promotion_id}", headers=admin, json=offer).status_code == 200
+    assert client.get("/campaigns").json()["banners"] == []
+    assert client.post("/customers/me/promos/validate", headers=headers, json=payload).status_code == 400
+
+
+def test_admin_rejects_invalid_promotion_and_banner(monkeypatch):
+    monkeypatch.setenv("ADMIN_API_TOKEN", "campaign-admin-token")
+    admin = {"X-Admin-Token": "campaign-admin-token"}
+    assert client.post("/admin/promotions", headers=admin, json={
+        "code": "SAVE", "discount_type": "percent", "discount_value": 101,
+    }).status_code == 422
+    assert client.post("/admin/banners", headers=admin, json={
+        "title": "Offer", "image_url": "http://insecure.test/image.png",
+    }).status_code == 422
