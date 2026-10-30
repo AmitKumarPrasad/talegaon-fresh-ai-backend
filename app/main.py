@@ -8,11 +8,11 @@ from contextlib import asynccontextmanager
 from datetime import date
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 from app.admin_orders import get_admin_order, list_orders
 from app.admin_dashboard import get_dashboard_summary
@@ -1166,3 +1166,110 @@ async def admin_ai_copilot(payload: AdminAiRequest, request: Request):
         logger.exception("Admin Copilot failed")
         return PlainTextResponse("Admin Copilot is temporarily unavailable.", status_code=503)
     return {"reply": reply}
+
+
+# Campaign editing is restricted to authenticated store administrators.
+from app.campaigns import BannerInput, PromotionInput, is_active
+from app.models import CampaignBannerModel, PromotionModel
+
+
+def _campaign_dict(item, fields):
+    return {"id": item.id, **{field: getattr(item, field) for field in fields}}
+
+
+_PROMOTION_FIELDS = ("code", "discount_type", "discount_value", "min_order", "max_discount",
+                     "first_order_only", "active", "starts_at", "ends_at")
+_BANNER_FIELDS = ("title", "description", "image_url", "promo_code", "display_order",
+                  "active", "starts_at", "ends_at")
+
+
+@app.get("/admin/promotions")
+def admin_list_promotions(request: Request):
+    if not _admin_authorized(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    with SessionLocal() as db:
+        return {"promotions": [_campaign_dict(p, _PROMOTION_FIELDS) for p in db.query(PromotionModel).order_by(PromotionModel.id).all()]}
+
+
+@app.post("/admin/promotions")
+def admin_create_promotion(request: Request, payload: PromotionInput):
+    if not _admin_authorized(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    with SessionLocal() as db:
+        item = PromotionModel(**payload.model_dump())
+        db.add(item)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="Promo code already exists")
+        db.refresh(item)
+        return _campaign_dict(item, _PROMOTION_FIELDS)
+
+
+@app.put("/admin/promotions/{promotion_id}")
+def admin_update_promotion(promotion_id: int, request: Request, payload: PromotionInput):
+    if not _admin_authorized(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    with SessionLocal() as db:
+        item = db.get(PromotionModel, promotion_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Promotion not found")
+        for key, value in payload.model_dump().items():
+            setattr(item, key, value)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="Promo code already exists")
+        db.refresh(item)
+        return _campaign_dict(item, _PROMOTION_FIELDS)
+
+
+@app.get("/admin/banners")
+def admin_list_banners(request: Request):
+    if not _admin_authorized(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    with SessionLocal() as db:
+        return {"banners": [_campaign_dict(b, _BANNER_FIELDS) for b in db.query(CampaignBannerModel).order_by(CampaignBannerModel.display_order, CampaignBannerModel.id).all()]}
+
+
+@app.post("/admin/banners")
+def admin_create_banner(request: Request, payload: BannerInput):
+    if not _admin_authorized(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    with SessionLocal() as db:
+        item = CampaignBannerModel(**payload.model_dump())
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+        return _campaign_dict(item, _BANNER_FIELDS)
+
+
+@app.put("/admin/banners/{banner_id}")
+def admin_update_banner(banner_id: int, request: Request, payload: BannerInput):
+    if not _admin_authorized(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    with SessionLocal() as db:
+        item = db.get(CampaignBannerModel, banner_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Banner not found")
+        for key, value in payload.model_dump().items():
+            setattr(item, key, value)
+        db.commit()
+        db.refresh(item)
+        return _campaign_dict(item, _BANNER_FIELDS)
+
+
+@app.get("/campaigns")
+def public_campaigns():
+    with SessionLocal() as db:
+        promotions = db.query(PromotionModel).all()
+        active_codes = {p.code for p in promotions if is_active(p)}
+        # Built-in codes remain usable unless an administrator creates an override.
+        for code in ("FRESH10", "SHOP200", "WELCOME50", "FRESHORA20"):
+            if not any(p.code == code for p in promotions):
+                active_codes.add(code)
+        banners = db.query(CampaignBannerModel).order_by(CampaignBannerModel.display_order, CampaignBannerModel.id).all()
+        return {"banners": [_campaign_dict(b, _BANNER_FIELDS) for b in banners
+                            if is_active(b) and (not b.promo_code or b.promo_code in active_codes)]}
