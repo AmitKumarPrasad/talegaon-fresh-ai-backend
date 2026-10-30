@@ -38,6 +38,7 @@ def notify_seller(order_id: int, customer_id: str, total: float, address: str, p
         f"Payment method: {payment_method}\n\n"
         "Open the Freshora admin panel to review the order and assign a partner.\n"
     )
+    stage = "oauth_refresh"
     try:
         token = _post_json(
             "https://oauth2.googleapis.com/token",
@@ -45,13 +46,17 @@ def notify_seller(order_id: int, customer_id: str, total: float, address: str, p
                        "refresh_token": refresh_token, "grant_type": "refresh_token"}).encode(),
             {"Content-Type": "application/x-www-form-urlencoded"},
         )["access_token"]
+        stage = "gmail_send"
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
         _post_json(
             "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
             json.dumps({"raw": raw}).encode(),
             {"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
         )
-    except (OSError, URLError, HTTPError, ValueError, KeyError):
-        logger.error("Order email failed order_id=%s", order_id)
+    except HTTPError as exc:
+        logger.error("Order email failed order_id=%s stage=%s http_status=%s", order_id, stage, exc.code)
+        return {"status": "failed"}
+    except (OSError, URLError, ValueError, KeyError) as exc:
+        logger.error("Order email failed order_id=%s stage=%s error_type=%s", order_id, stage, type(exc).__name__)
         return {"status": "failed"}
     return {"status": "sent"}
