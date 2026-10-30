@@ -501,8 +501,8 @@ def release_partner_assignment(
         order.delivery_location_updated_at = None
         order.delivery_batch_id = None
         order.delivery_sequence = None
-        order.delivery_distance_km = None
-        order.delivery_incentive = None
+        order.delivery_distance_km = 0
+        order.delivery_incentive = 0
         db.add(OrderMessageModel(order_id=order.id, sender="PARTNER",
                                  message=f"Delivery assignment released. Reason: {payload.reason}"))
         db.commit()
