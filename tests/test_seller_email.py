@@ -1,31 +1,34 @@
-from unittest.mock import MagicMock, patch
-import smtplib
+import base64
+import json
+from unittest.mock import patch
+from urllib.error import URLError
 
 from app.seller_notification import notify_seller
 
 
-def test_new_order_email_uses_tls_and_sends_to_admin(monkeypatch):
+def configure(monkeypatch):
     for key, value in {
-        "ORDER_EMAIL_SMTP_HOST": "smtp.example.com",
-        "ORDER_EMAIL_SMTP_PORT": "587",
         "ORDER_EMAIL_FROM": "sender@example.com",
         "ORDER_EMAIL_TO": "admin@example.com",
-        "ORDER_EMAIL_USERNAME": "sender@example.com",
-        "ORDER_EMAIL_PASSWORD": "test-secret",
+        "GMAIL_CLIENT_ID": "client",
+        "GMAIL_CLIENT_SECRET": "secret",
+        "GMAIL_REFRESH_TOKEN": "refresh",
     }.items():
         monkeypatch.setenv(key, value)
-    server = MagicMock()
-    with patch("app.seller_notification.smtplib.SMTP") as smtp:
-        smtp.return_value.__enter__.return_value = server
-        result = notify_seller(12, "customer", 499, "address", "COD")
-    assert result["status"] == "sent"
-    smtp.assert_called_once_with("smtp.example.com", 587, timeout=10)
-    server.starttls.assert_called_once()
-    server.login.assert_called_once_with("sender@example.com", "test-secret")
-    msg = server.send_message.call_args.args[0]
-    assert msg["To"] == "admin@example.com"
-    assert "#12" in msg["Subject"]
-    assert "499.00" in msg.get_content()
+
+
+def test_new_order_email_uses_gmail_api(monkeypatch):
+    configure(monkeypatch)
+    with patch("app.seller_notification._post_json", side_effect=[{"access_token": "access"}, {"id": "sent"}]) as post:
+        assert notify_seller(12, "customer", 499, "address", "COD")["status"] == "sent"
+    assert post.call_count == 2
+    url, body, headers = post.call_args.args
+    assert url == "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
+    assert headers["Authorization"] == "Bearer access"
+    msg = base64.urlsafe_b64decode(json.loads(body)["raw"]).decode()
+    assert "admin@example.com" in msg
+    assert "#12" in msg
+    assert "499.00" in msg
 
 
 def test_unconfigured_email_is_skipped(monkeypatch):
@@ -33,9 +36,7 @@ def test_unconfigured_email_is_skipped(monkeypatch):
     assert notify_seller(1, "customer", 10, "address", "COD")["status"] == "skipped"
 
 
-def test_smtp_failure_is_reported_without_raising(monkeypatch):
-    for key in ("ORDER_EMAIL_SMTP_HOST", "ORDER_EMAIL_FROM", "ORDER_EMAIL_TO",
-                "ORDER_EMAIL_USERNAME", "ORDER_EMAIL_PASSWORD"):
-        monkeypatch.setenv(key, "configured")
-    with patch("app.seller_notification.smtplib.SMTP", side_effect=smtplib.SMTPException("failed")):
+def test_api_failure_is_reported_without_raising(monkeypatch):
+    configure(monkeypatch)
+    with patch("app.seller_notification._post_json", side_effect=URLError("failed")):
         assert notify_seller(1, "customer", 10, "address", "COD")["status"] == "failed"
