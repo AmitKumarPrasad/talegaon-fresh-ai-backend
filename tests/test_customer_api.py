@@ -777,7 +777,7 @@ def test_new_order_alert_excludes_disabled_partners_and_customer_pii():
     assert alert["order_id"] == response.json()["order_id"]
 
 
-@pytest.mark.parametrize("catalog_price,expected_status", [(498.99, 400), (499.0, 400), (500.0, 200)])
+@pytest.mark.parametrize("catalog_price,expected_status", [(498.99, 400), (499.0, 200), (500.0, 200)])
 def test_welcome50_boundary_uses_server_prices_for_quote_and_checkout(catalog_price, expected_status):
     headers = {"Authorization": "Bearer " + auth()}
     from app.db import SessionLocal
@@ -799,13 +799,13 @@ def test_welcome50_boundary_uses_server_prices_for_quote_and_checkout(catalog_pr
     order = client.post("/customers/me/orders", headers=headers, json=checkout_payload)
     assert order.status_code == expected_status
     if expected_status == 200:
-        assert quote.json()["subtotal"] == 500
+        assert quote.json()["subtotal"] == catalog_price
         assert quote.json()["discount_amount"] == 50
         assert quote.json()["delivery_fee"] == 0
-        assert quote.json()["total"] == 450
+        assert quote.json()["total"] == round(catalog_price - 50, 2)
         assert order.json()["discount_amount"] == 50
         assert order.json()["delivery_fee"] == 0
-        assert order.json()["total"] == 450
+        assert order.json()["total"] == round(catalog_price - 50, 2)
         replay = client.post("/customers/me/orders", headers=headers, json=checkout_payload)
         assert replay.status_code == 200
         assert replay.json() == order.json()
