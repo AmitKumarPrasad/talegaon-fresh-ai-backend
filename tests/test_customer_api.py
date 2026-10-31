@@ -983,3 +983,29 @@ def test_admin_rejects_invalid_promotion_and_banner(monkeypatch):
     assert client.post("/admin/banners", headers=admin, json={
         "title": "Offer", "image_url": "http://insecure.test/image.png",
     }).status_code == 422
+
+
+def test_order_snapshots_saved_address_coordinates():
+    from app.db import SessionLocal
+    from app.models import OrderModel
+
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    address_payload = {"label": "Home", "address": "Flat 1", "city": "Talegaon",
+                       "pincode": "410507", "latitude": 18.75, "longitude": 73.67}
+    created = client.post("/customers/me/addresses", headers=headers, json=address_payload)
+    assert created.status_code == 200
+    address_id = created.json()["address"]["id"]
+    assert created.json()["address"]["latitude"] == 18.75
+    order = client.post("/customers/me/orders", headers=headers, json={
+        "items": [{"name": "Tomato", "unit": "1 kg", "price": 40, "quantity": 1}],
+        "address_id": address_id, "payment_method": "COD",
+    })
+    assert order.status_code == 200
+    order_id = order.json()["order_id"]
+    address_payload["latitude"] = 18.80
+    assert client.put(f"/customers/me/addresses/{address_id}", headers=headers, json=address_payload).status_code == 200
+    with SessionLocal() as db:
+        saved_order = db.get(OrderModel, order_id)
+        assert saved_order.destination_latitude == 18.75
+        assert saved_order.destination_longitude == 73.67
