@@ -5,7 +5,7 @@ import secrets
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.exc import IntegrityError
 import os
 
@@ -113,6 +113,14 @@ class AddressRequest(BaseModel):
     city: str = Field(min_length=1, max_length=100)
     pincode: str = Field(pattern=r"^[1-9][0-9]{5}$")
     is_default: bool = False
+    latitude: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
+    longitude: float | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)
+
+    @model_validator(mode='after')
+    def coordinate_pair(self):
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError('Latitude and longitude must be provided together')
+        return self
 
 
 class CartItem(BaseModel):
@@ -432,7 +440,7 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
 
 
 def _address_dict(item: AddressModel) -> dict:
-    return {"id": item.id, "label": item.label, "address": item.address, "city": item.city, "pincode": item.pincode, "is_default": item.is_default}
+    return {"id": item.id, "label": item.label, "address": item.address, "city": item.city, "pincode": item.pincode, "is_default": item.is_default, "latitude": item.latitude, "longitude": item.longitude}
 
 
 LEGACY_CHECKOUT_RETRY_WINDOW = timedelta(minutes=2)
@@ -726,6 +734,7 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
                     raise HTTPException(409, "Checkout request changed. Start a new checkout.")
                 return checkout_request.response
         address = payload.address
+        saved = None
         if payload.address_id is not None:
             saved = db.get(AddressModel, payload.address_id)
             if not saved or saved.customer_id != customer.phone:
@@ -752,6 +761,8 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
         order = OrderModel(
             customer_id=customer.phone,
             address=address,
+            destination_latitude=saved.latitude if saved else None,
+            destination_longitude=saved.longitude if saved else None,
             status="PENDING",
             promo_code=resolved_promo[0] if resolved_promo else None,
         )
