@@ -574,7 +574,7 @@ def update_address_api(address_id: int, payload: AddressRequest, customer: Custo
             raise HTTPException(status_code=404, detail="Address not found")
         if payload.is_default:
             db.query(AddressModel).filter(AddressModel.customer_id == customer.phone).update({"is_default": False})
-        for key, value in payload.model_dump().items():
+        for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(row, key, value)
         db.commit()
         db.refresh(row)
