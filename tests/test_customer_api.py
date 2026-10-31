@@ -1009,3 +1009,20 @@ def test_order_snapshots_saved_address_coordinates():
         saved_order = db.get(OrderModel, order_id)
         assert saved_order.destination_latitude == 18.75
         assert saved_order.destination_longitude == 73.67
+
+
+def test_legacy_address_edit_preserves_coordinates():
+    token = auth()
+    headers = {"Authorization": f"Bearer {token}"}
+    data = {"label": "Home", "address": "Flat 1", "city": "Talegaon",
+            "pincode": "410507", "latitude": 18.75, "longitude": 73.67}
+    created = client.post("/customers/me/addresses", headers=headers, json=data)
+    assert created.status_code == 200
+    address_id = created.json()["address"]["id"]
+    data.pop("latitude")
+    data.pop("longitude")
+    data["address"] = "Flat 2"
+    edited = client.put(f"/customers/me/addresses/{address_id}", headers=headers, json=data)
+    assert edited.status_code == 200
+    assert edited.json()["address"]["latitude"] == 18.75
+    assert edited.json()["address"]["longitude"] == 73.67
