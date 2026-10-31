@@ -196,40 +196,33 @@ def test_other_partner_cannot_read_or_mutate_assigned_order(delivery_client, met
 
 
 
-def test_partner_cancels_assigned_unpaid_order_before_pickup_and_releases_stock(delivery_client):
+def test_partner_releases_assignment_without_cancelling_order(delivery_client):
     client, factory = delivery_client
     with factory() as db:
         order = db.get(OrderModel, 1)
         order.status = "PACKING"
         order.delivery_status = "ACCEPTED"
         order.stock_reserved = True
-        order.payment_method = "COD"
-        product = ProductModel(name="Milk", unit="piece", price=10, stock_quantity=3, in_stock=True)
-        db.add(product)
-        db.add(OrderItemModel(
-            order_id=1, product_name="Milk", quantity=2, unit_price=10, line_total=20
-        ))
+        order.delivery_token = "old-token"
+        order.payment_verified_at = datetime.now(timezone.utc)
+        db.add(ProductModel(name="Milk", unit="piece", price=10, stock_quantity=3, in_stock=True))
         db.commit()
-
-    response = client.post(
-        "/partner/orders/1/cancel",
-        json={"reason": "Vehicle issue"},
-    )
-
+    response = client.post("/partner/orders/1/release", json={"reason": "Vehicle issue"})
     assert response.status_code == 200
-    assert response.json()["status"] == "CANCELLED"
-    assert response.json()["delivery_status"] == "CANCELLED"
+    assert response.json()["assignment_released"] is True
+    assert response.json()["status"] == "PACKING"
+    assert client.get("/partner/orders").json() == {"orders": []}
+    assert client.get("/partner/orders/1").status_code == 404
     with factory() as db:
         order = db.get(OrderModel, 1)
-        assert order.status == "CANCELLED"
-        assert order.delivery_status == "CANCELLED"
-        assert order.stock_reserved is False
-        assert db.query(ProductModel).filter_by(name="Milk").one().stock_quantity == 5
-        history = db.query(OrderStatusHistoryModel).one()
-        assert (history.from_status, history.to_status) == ("PACKING", "CANCELLED")
-        message = db.query(OrderMessageModel).one()
-        assert message.sender == "PARTNER"
-        assert "Vehicle issue" in message.message
+        assert order.status == "PACKING"
+        assert order.delivery_status is None
+        assert order.delivery_person_phone is None
+        assert order.delivery_token is None
+        assert order.stock_reserved is True
+        assert db.query(ProductModel).filter_by(name="Milk").one().stock_quantity == 3
+        assert db.query(OrderStatusHistoryModel).count() == 0
+        assert "Vehicle issue" in db.query(OrderMessageModel).one().message
 
 
 def test_partner_cannot_cancel_after_pickup_or_out_for_delivery(delivery_client):
@@ -241,7 +234,7 @@ def test_partner_cannot_cancel_after_pickup_or_out_for_delivery(delivery_client)
         db.commit()
 
     response = client.post(
-        "/partner/orders/1/cancel",
+        "/partner/orders/1/release",
         json={"reason": "Vehicle issue"},
     )
 
@@ -253,33 +246,18 @@ def test_partner_cannot_cancel_after_pickup_or_out_for_delivery(delivery_client)
         assert db.query(OrderStatusHistoryModel).count() == 0
 
 
-def test_partner_cannot_cancel_a_paid_order_without_refund_flow(delivery_client):
+def test_legacy_cancel_requires_app_update(delivery_client):
     client, factory = delivery_client
-    with factory() as db:
-        order = db.get(OrderModel, 1)
-        order.status = "PACKING"
-        order.delivery_status = "ASSIGNED"
-        order.payment_verified_at = datetime.now(timezone.utc)
-        db.commit()
-
-    response = client.post(
-        "/partner/orders/1/cancel",
-        json={"reason": "Customer requested cancellation"},
-    )
-
+    response = client.post("/partner/orders/1/cancel", json={"reason": "Vehicle issue"})
     assert response.status_code == 409
-    assert "refund" in response.json()["detail"].lower()
     with factory() as db:
-        order = db.get(OrderModel, 1)
-        assert order.status == "PACKING"
-        assert order.delivery_status == "ASSIGNED"
-        assert db.query(OrderStatusHistoryModel).count() == 0
+        assert db.get(OrderModel, 1).status == "OUT_FOR_DELIVERY"
 
 
 def test_partner_cancel_requires_a_useful_reason(delivery_client):
     client, _ = delivery_client
     response = client.post(
-        "/partner/orders/1/cancel",
+        "/partner/orders/1/release",
         json={"reason": "  "},
     )
     assert response.status_code == 422
@@ -295,7 +273,7 @@ def test_other_partner_cannot_cancel_assigned_order(delivery_client):
         db.commit()
 
     response = client.post(
-        "/partner/orders/1/cancel",
+        "/partner/orders/1/release",
         json={"reason": "Vehicle issue"},
     )
 
