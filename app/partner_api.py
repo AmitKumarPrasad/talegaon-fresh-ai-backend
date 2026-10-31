@@ -301,6 +301,8 @@ def _order_dict(db, order: OrderModel) -> dict:
         "status": order.status,
         "delivery_status": ("CANCELLED" if order.status == "CANCELLED" else order.delivery_status),
         "address": order.address,
+        "destination_latitude": order.destination_latitude,
+        "destination_longitude": order.destination_longitude,
         "total": order.total,
         "payment_method": order.payment_method,
         "cod_amount": order.total if order.payment_method == "COD" else 0,

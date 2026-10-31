@@ -37,6 +37,8 @@ class OrderModel(Base):
     discount_amount: Mapped[float] = mapped_column(Float, default=0, nullable=False)
     promo_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    destination_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    destination_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     payment_method: Mapped[str | None] = mapped_column(String(20), nullable=True)
     payment_link_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     razorpay_payment_link_id: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
@@ -150,6 +152,8 @@ class AddressModel(Base):
     address: Mapped[str] = mapped_column(String(500))
     city: Mapped[str] = mapped_column(String(100))
     pincode: Mapped[str] = mapped_column(String(6))
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
@@ -196,3 +200,30 @@ class CheckoutRequestModel(Base):
     request_key: Mapped[str] = mapped_column(String(100), primary_key=True)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     response: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+
+class PromotionModel(Base):
+    __tablename__ = "promotions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    discount_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    discount_value: Mapped[float] = mapped_column(Float, nullable=False)
+    min_order: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    max_discount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    first_order_only: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CampaignBannerModel(Base):
+    __tablename__ = "campaign_banners"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(String(300), default="", nullable=False)
+    image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    promo_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

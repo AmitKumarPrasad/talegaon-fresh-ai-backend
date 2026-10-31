@@ -5,7 +5,7 @@ import secrets
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.exc import IntegrityError
 import os
 
@@ -32,6 +32,8 @@ from app.models import (
     ProductRequestModel,
     DeliveryPartnerModel,
 )
+from app.campaigns import is_active
+from app.models import PromotionModel
 from app.order_details import customer_order_dict as _order_dict, get_customer_order
 from app.payment_service import PaymentError, cancel_payment_link, create_payment_link
 from app.order_status import get_allowed_transitions, list_status_history
@@ -111,6 +113,14 @@ class AddressRequest(BaseModel):
     city: str = Field(min_length=1, max_length=100)
     pincode: str = Field(pattern=r"^[1-9][0-9]{5}$")
     is_default: bool = False
+    latitude: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
+    longitude: float | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)
+
+    @model_validator(mode='after')
+    def coordinate_pair(self):
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError('Latitude and longitude must be provided together')
+        return self
 
 
 class CartItem(BaseModel):
@@ -157,7 +167,18 @@ def _promo_rule(db, customer_id: str, promo_code: str | None) -> tuple[str, dict
         return None
 
     code = promo_code.strip().upper()
-    rule = _PROMO_RULES.get(code)
+    configured = db.query(PromotionModel).filter(PromotionModel.code == code).first()
+    if configured is not None:
+        if not is_active(configured):
+            raise HTTPException(status_code=400, detail="This promo code is not active.")
+        rule = {"min_order": configured.min_order, "first_order_only": configured.first_order_only}
+        if configured.discount_type == "flat":
+            rule["flat_discount"] = configured.discount_value
+        else:
+            rule["percent"] = configured.discount_value / 100
+            rule["max_discount"] = configured.max_discount
+    else:
+        rule = _PROMO_RULES.get(code)
     if rule is not None:
         if rule.get("first_order_only") and db.query(OrderModel.id).filter(
             OrderModel.customer_id == customer_id
@@ -419,7 +440,7 @@ def _mobile_ai_reply(message: str, customer_id: str) -> str:
 
 
 def _address_dict(item: AddressModel) -> dict:
-    return {"id": item.id, "label": item.label, "address": item.address, "city": item.city, "pincode": item.pincode, "is_default": item.is_default}
+    return {"id": item.id, "label": item.label, "address": item.address, "city": item.city, "pincode": item.pincode, "is_default": item.is_default, "latitude": item.latitude, "longitude": item.longitude}
 
 
 LEGACY_CHECKOUT_RETRY_WINDOW = timedelta(minutes=2)
@@ -553,7 +574,7 @@ def update_address_api(address_id: int, payload: AddressRequest, customer: Custo
             raise HTTPException(status_code=404, detail="Address not found")
         if payload.is_default:
             db.query(AddressModel).filter(AddressModel.customer_id == customer.phone).update({"is_default": False})
-        for key, value in payload.model_dump().items():
+        for key, value in payload.model_dump(exclude_unset=True).items():
             setattr(row, key, value)
         db.commit()
         db.refresh(row)
@@ -713,6 +734,7 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
                     raise HTTPException(409, "Checkout request changed. Start a new checkout.")
                 return checkout_request.response
         address = payload.address
+        saved = None
         if payload.address_id is not None:
             saved = db.get(AddressModel, payload.address_id)
             if not saved or saved.customer_id != customer.phone:
@@ -739,6 +761,8 @@ def create_order(payload: OrderRequest, customer: CustomerModel = Depends(curren
         order = OrderModel(
             customer_id=customer.phone,
             address=address,
+            destination_latitude=saved.latitude if saved else None,
+            destination_longitude=saved.longitude if saved else None,
             status="PENDING",
             promo_code=resolved_promo[0] if resolved_promo else None,
         )
