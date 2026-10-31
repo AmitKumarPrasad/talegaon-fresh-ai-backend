@@ -12,3 +12,9 @@ def test_address_coordinates_are_optional_and_validated_as_pair():
         AddressRequest(**values, latitude=18.75)
     with pytest.raises(ValidationError):
         AddressRequest(**values, latitude=91, longitude=73)
+
+
+def test_address_rejects_non_finite_coordinates():
+    values = dict(label='Home', address='Flat 1', city='Maval', pincode='410507')
+    with pytest.raises(ValidationError):
+        AddressRequest(**values, latitude=float('nan'), longitude=73.0)
