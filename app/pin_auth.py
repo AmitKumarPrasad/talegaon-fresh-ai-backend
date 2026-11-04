@@ -70,6 +70,12 @@ def _retry_token(token: str, device_id: str, secret: str) -> str:
     payload = json.dumps(["customer-refresh-retry-v1", token, device_id], separators=(",", ":")).encode()
     return _b64(hmac.new(secret.encode(), payload, hashlib.sha384).digest())
 
+def _recovery_secret() -> str:
+    secret = os.getenv("JWT_SECRET", "")
+    if len(secret) < 32 or secret == "development-jwt-secret-change-me":
+        return ""
+    return secret
+
 def _issue(db, customer: CustomerModel, device_id: str, refresh: str | None = None) -> dict:
     refresh = refresh or secrets.token_urlsafe(48)
     session_hash = _refresh_hash(refresh)
@@ -125,8 +131,8 @@ def refresh(refresh_token: str, device_id: str) -> dict:
             # its immediate successor remains active. Never replay a logout.
             rotated = row.rotated_at
             if rotated and rotated.tzinfo is None: rotated = rotated.replace(tzinfo=timezone.utc)
-            secret = os.getenv("JWT_SECRET", "")
-            if (not row.rotated_to_hash or not rotated or len(secret) < 32
+            secret = _recovery_secret()
+            if (not row.rotated_to_hash or not rotated or not secret
                 or now - rotated > timedelta(seconds=REFRESH_RETRY_SECONDS)
                 or not hmac.compare_digest(row.device_id, device_id)):
                 raise HTTPException(401, "Invalid refresh session")
@@ -148,8 +154,8 @@ def refresh(refresh_token: str, device_id: str) -> dict:
         customer=db.get(CustomerModel,row.customer_id)
         if not customer: raise HTTPException(401, "Customer not found")
         row.revoked_at=now
-        secret = os.getenv("JWT_SECRET", "")
-        if len(secret) >= 32:
+        secret = _recovery_secret()
+        if secret:
             successor_token = _retry_token(refresh_token, device_id, secret)
             row.rotated_to_hash = _refresh_hash(successor_token)
             row.rotated_at = now
