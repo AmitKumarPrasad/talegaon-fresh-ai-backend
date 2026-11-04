@@ -12,7 +12,8 @@ ACCESS_TOKEN_MINUTES = 30
 REFRESH_TOKEN_DAYS = 90
 MAX_FAILED = 5
 LOCK_MINUTES = 15
-REFRESH_RETRY_SECONDS = 30
+# The customer client may wait up to 90 seconds for a cold backend.
+REFRESH_RETRY_SECONDS = 120
 
 class PinCredentialModel(Base):
     __tablename__ = "customer_pin_credentials"
