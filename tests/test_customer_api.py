@@ -89,9 +89,13 @@ def test_refresh_retry_window_is_limited(monkeypatch):
         "phone": str(next(_phones)), "name": "Test User", "pin": "123456", "device_id": device,
     }).json()
     payload = {"refresh_token": registered["refresh_token"], "device_id": device}
-    assert client.post("/auth/refresh", json=payload).status_code == 200
+    first = client.post("/auth/refresh", json=payload)
+    assert first.status_code == 200
     monkeypatch.setattr("app.pin_auth.REFRESH_RETRY_SECONDS", -1)
     assert client.post("/auth/refresh", json=payload).status_code == 401
+    assert client.post("/auth/logout-session", json=payload).status_code == 200
+    current = {"refresh_token": first.json()["refresh_token"], "device_id": device}
+    assert client.post("/auth/refresh", json=current).status_code == 200
 
 
 def test_address_update_reassigns_default_and_blocks_other_customer():

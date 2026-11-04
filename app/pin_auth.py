@@ -166,11 +166,18 @@ def refresh(refresh_token: str, device_id: str) -> dict:
         db.commit(); return result
     finally: db.close()
 
-def revoke(refresh_token: str) -> None:
+def revoke(refresh_token: str, device_id: str) -> None:
     db=SessionLocal()
     try:
         row=db.query(CustomerSessionModel).filter(CustomerSessionModel.refresh_token_hash==_refresh_hash(refresh_token)).with_for_update().first()
         if row:
+            if not hmac.compare_digest(row.device_id, device_id):
+                return
+            if row.revoked_at is not None:
+                rotated = row.rotated_at
+                if rotated and rotated.tzinfo is None: rotated = rotated.replace(tzinfo=timezone.utc)
+                if not row.rotated_to_hash or not rotated or datetime.now(timezone.utc) - rotated > timedelta(seconds=REFRESH_RETRY_SECONDS):
+                    return
             # Revoke the successor too if logout follows a lost refresh reply.
             seen = set()
             while row and row.refresh_token_hash not in seen:
