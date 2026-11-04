@@ -62,6 +62,38 @@ def test_auth_and_addresses():
     assert deleted.status_code == 200
 
 
+def test_lost_refresh_reply_can_be_retried_and_logout_revokes_successor(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-refresh-recovery-secret-at-least-32-characters")
+    device = "customer-api-test-device"
+    registered = client.post("/auth/register", json={
+        "phone": str(next(_phones)), "name": "Test User", "pin": "123456", "device_id": device,
+    }).json()
+    payload = {"refresh_token": registered["refresh_token"], "device_id": device}
+    first = client.post("/auth/refresh", json=payload)
+    assert first.status_code == 200
+    retry = client.post("/auth/refresh", json=payload)
+    assert retry.status_code == 200
+    assert retry.json()["refresh_token"] == first.json()["refresh_token"]
+    wrong = client.post("/auth/refresh", json={**payload, "device_id": "another-device-id-123"})
+    assert wrong.status_code == 401
+    assert client.post("/auth/logout-session", json=payload).status_code == 200
+    assert client.post("/auth/refresh", json=payload).status_code == 401
+    successor = {"refresh_token": first.json()["refresh_token"], "device_id": device}
+    assert client.post("/auth/refresh", json=successor).status_code == 401
+
+
+def test_refresh_retry_window_is_limited(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", "test-refresh-recovery-secret-at-least-32-characters")
+    device = "customer-api-test-device"
+    registered = client.post("/auth/register", json={
+        "phone": str(next(_phones)), "name": "Test User", "pin": "123456", "device_id": device,
+    }).json()
+    payload = {"refresh_token": registered["refresh_token"], "device_id": device}
+    assert client.post("/auth/refresh", json=payload).status_code == 200
+    monkeypatch.setattr("app.pin_auth.REFRESH_RETRY_SECONDS", -1)
+    assert client.post("/auth/refresh", json=payload).status_code == 401
+
+
 def test_address_update_reassigns_default_and_blocks_other_customer():
     token = auth()
     headers = {"Authorization": f"Bearer {token}"}
