@@ -12,6 +12,8 @@ ACCESS_TOKEN_MINUTES = 30
 REFRESH_TOKEN_DAYS = 90
 MAX_FAILED = 5
 LOCK_MINUTES = 15
+# The customer client may wait up to 90 seconds for a cold backend.
+REFRESH_RETRY_SECONDS = 120
 
 class PinCredentialModel(Base):
     __tablename__ = "customer_pin_credentials"
@@ -28,6 +30,8 @@ class CustomerSessionModel(Base):
     refresh_token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rotated_to_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 def _secret() -> str:
     return os.getenv("JWT_SECRET", "development-jwt-secret-change-me")
@@ -63,8 +67,18 @@ def _token(phone: str, name: str, version: int, session_hash: str) -> str:
 def _refresh_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
-def _issue(db, customer: CustomerModel, device_id: str) -> dict:
-    refresh = secrets.token_urlsafe(48)
+def _retry_token(token: str, device_id: str, secret: str) -> str:
+    payload = json.dumps(["customer-refresh-retry-v1", token, device_id], separators=(",", ":")).encode()
+    return _b64(hmac.new(secret.encode(), payload, hashlib.sha384).digest())
+
+def _recovery_secret() -> str:
+    secret = os.getenv("JWT_SECRET", "")
+    if len(secret) < 32 or secret == "development-jwt-secret-change-me":
+        return ""
+    return secret
+
+def _issue(db, customer: CustomerModel, device_id: str, refresh: str | None = None) -> dict:
+    refresh = refresh or secrets.token_urlsafe(48)
     session_hash = _refresh_hash(refresh)
     db.add(CustomerSessionModel(customer_id=customer.phone, device_id=device_id, refresh_token_hash=session_hash, expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_DAYS)))
     return {"access_token": _token(customer.phone, customer.name, customer.auth_version, session_hash), "refresh_token": refresh, "token_type": "bearer", "expires_in": ACCESS_TOKEN_MINUTES * 60, "customer": {"phone": customer.phone, "name": customer.name, "is_reviewer": is_reviewer(customer.phone)}}
@@ -110,25 +124,70 @@ def login(phone: str, pin: str, device_id: str) -> dict:
 def refresh(refresh_token: str, device_id: str) -> dict:
     db=SessionLocal()
     try:
-        row=db.query(CustomerSessionModel).filter(CustomerSessionModel.refresh_token_hash==_refresh_hash(refresh_token), CustomerSessionModel.revoked_at.is_(None)).first()
+        row=db.query(CustomerSessionModel).filter(CustomerSessionModel.refresh_token_hash==_refresh_hash(refresh_token)).with_for_update().first()
         if not row: raise HTTPException(401, "Invalid refresh session")
+        now = datetime.now(timezone.utc)
+        if row.revoked_at is not None:
+            # Replay only an explicitly rotated token, on the same device, while
+            # its immediate successor remains active. Never replay a logout.
+            rotated = row.rotated_at
+            if rotated and rotated.tzinfo is None: rotated = rotated.replace(tzinfo=timezone.utc)
+            secret = _recovery_secret()
+            if (not row.rotated_to_hash or not rotated or not secret
+                or now - rotated > timedelta(seconds=REFRESH_RETRY_SECONDS)
+                or not hmac.compare_digest(row.device_id, device_id)):
+                raise HTTPException(401, "Invalid refresh session")
+            successor = db.query(CustomerSessionModel).filter(
+                CustomerSessionModel.refresh_token_hash == row.rotated_to_hash,
+                CustomerSessionModel.revoked_at.is_(None),
+            ).with_for_update().first()
+            if not successor: raise HTTPException(401, "Invalid refresh session")
+            recovered = _retry_token(refresh_token, device_id, secret)
+            if not hmac.compare_digest(_refresh_hash(recovered), row.rotated_to_hash):
+                raise HTTPException(401, "Invalid refresh session")
+            customer = db.get(CustomerModel, row.customer_id)
+            if not customer: raise HTTPException(401, "Customer not found")
+            return {"access_token": _token(customer.phone, customer.name, customer.auth_version, row.rotated_to_hash), "refresh_token": recovered, "token_type": "bearer", "expires_in": ACCESS_TOKEN_MINUTES * 60, "customer": {"phone": customer.phone, "name": customer.name, "is_reviewer": is_reviewer(customer.phone)}}
         expires=row.expires_at
         if expires.tzinfo is None: expires=expires.replace(tzinfo=timezone.utc)
         if expires <= datetime.now(timezone.utc): raise HTTPException(401, "Refresh session expired")
         if not hmac.compare_digest(row.device_id, device_id): row.revoked_at=datetime.now(timezone.utc); db.commit(); raise HTTPException(401, "Session device mismatch")
         customer=db.get(CustomerModel,row.customer_id)
         if not customer: raise HTTPException(401, "Customer not found")
-        row.revoked_at=datetime.now(timezone.utc)
-        result=_issue(db,customer,device_id); db.commit(); return result
+        row.revoked_at=now
+        secret = _recovery_secret()
+        if secret:
+            successor_token = _retry_token(refresh_token, device_id, secret)
+            row.rotated_to_hash = _refresh_hash(successor_token)
+            row.rotated_at = now
+            result=_issue(db,customer,device_id,successor_token)
+        else:
+            result=_issue(db,customer,device_id)
+        db.commit(); return result
     finally: db.close()
 
-def revoke(refresh_token: str) -> None:
+def revoke(refresh_token: str, device_id: str) -> None:
     db=SessionLocal()
     try:
-        row=db.query(CustomerSessionModel).filter(CustomerSessionModel.refresh_token_hash==_refresh_hash(refresh_token), CustomerSessionModel.revoked_at.is_(None)).first()
+        row=db.query(CustomerSessionModel).filter(CustomerSessionModel.refresh_token_hash==_refresh_hash(refresh_token)).with_for_update().first()
         if row:
-            row.revoked_at = datetime.now(timezone.utc)
-            customer = db.get(CustomerModel, row.customer_id)
+            if not hmac.compare_digest(row.device_id, device_id):
+                return
+            if row.revoked_at is not None:
+                rotated = row.rotated_at
+                if rotated and rotated.tzinfo is None: rotated = rotated.replace(tzinfo=timezone.utc)
+                if not row.rotated_to_hash or not rotated or datetime.now(timezone.utc) - rotated > timedelta(seconds=REFRESH_RETRY_SECONDS):
+                    return
+            # Revoke the successor too if logout follows a lost refresh reply.
+            seen = set()
+            while row and row.refresh_token_hash not in seen:
+                seen.add(row.refresh_token_hash)
+                row.revoked_at = datetime.now(timezone.utc)
+                next_hash = row.rotated_to_hash
+                row.rotated_to_hash = None
+                customer_id = row.customer_id
+                row = db.query(CustomerSessionModel).filter(CustomerSessionModel.refresh_token_hash == next_hash).with_for_update().first() if next_hash else None
+            customer = db.get(CustomerModel, customer_id)
             if customer:
                 # The account has one stored push token, which must not remain
                 # attached after a device session is explicitly signed out.

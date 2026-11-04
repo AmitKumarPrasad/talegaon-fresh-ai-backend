@@ -477,7 +477,7 @@ def auth_refresh(payload: RefreshRequest):
 
 @router.post("/auth/logout-session")
 def auth_logout_session(payload: RefreshRequest):
-    revoke_refresh(payload.refresh_token)
+    revoke_refresh(payload.refresh_token, payload.device_id)
     return {"status": "logged_out"}
 
 
