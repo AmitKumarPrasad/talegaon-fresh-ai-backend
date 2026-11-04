@@ -65,7 +65,7 @@ def test_device_logout_revokes_its_access_token_and_preserves_other_devices(sess
     other_device = "logout-regression-device-two"
     first = pin_auth.register("9999999999", "First", "123456", device)
     other = pin_auth.login("9999999999", "123456", other_device)
-    pin_auth.revoke(first["refresh_token"])
+    pin_auth.revoke(first["refresh_token"], device)
 
     with pytest.raises(HTTPException) as error:
         auth.current_customer("Bearer " + first["access_token"])
@@ -81,7 +81,7 @@ def test_device_logout_revokes_its_access_token_and_preserves_other_devices(sess
 def test_pin_account_cannot_use_old_unbound_access_token_after_device_logout(sessions):
     tokens = pin_auth.register("9999999999", "First", "123456", "logout-regression-device")
     old_access = auth.create_token("9999999999", "First")
-    pin_auth.revoke(tokens["refresh_token"])
+    pin_auth.revoke(tokens["refresh_token"], "logout-regression-device")
     with pytest.raises(HTTPException) as error:
         auth.current_customer("Bearer " + old_access)
     assert error.value.status_code == 401
@@ -117,7 +117,7 @@ def test_verified_otp_for_pin_customer_returns_usable_revocable_session(sessions
     assert auth.current_customer("Bearer " + verified["token"]).phone == "9999999999"
     rotated = pin_auth.refresh(verified["refresh_token"], verified["device_id"])
     assert auth.current_customer("Bearer " + rotated["access_token"]).phone == "9999999999"
-    pin_auth.revoke(rotated["refresh_token"])
+    pin_auth.revoke(rotated["refresh_token"], verified["device_id"])
     with pytest.raises(HTTPException) as error:
         auth.current_customer("Bearer " + rotated["access_token"])
     assert error.value.status_code == 401
